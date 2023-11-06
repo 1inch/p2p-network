@@ -159,16 +159,40 @@ Network nodes in the 1inch P2P Network are categorized into three types:
     - They decrypt incoming messages, process the requested actions, and encrypt the responses.
     - Top resolvers are selected via community governance, ensuring a trusted set of service providers.
 
-### 5.2 Off-Chain Payment Channels
-Off-chain payment channels are a critical component of the network's microtransaction framework, allowing for high-throughput and low-cost transactions.
+## 5.2 Off-Chain Payment Channels
 
-1. **Channel Establishment**:
-    - Users and Resolvers establish channels upon the first interaction.
-    - Channels are funded by the Users and secured by smart contracts.
+### 5.2.1 User-Directed Payment Cap with Dutch Auction Mechanics
 
-2. **Micro-Payments**:
-    - Users sign micro-payment transactions as part of their RPC request payloads.
-    - Resolvers validate these signatures and claim payments upon successful service delivery.
+The 1inch P2P Decentralized Network introduces a refined payment mechanism for handling transactions tied to RPC calls, employing a Dutch auction model with millisecond precision.
+
+1. **Dutch Auction Timing**:
+   - Each RPC request is embedded with a user-signed payment signature indicating the precise moment from which the auction commences, accompanied by a user-defined maximum price cap for the transaction.
+   - Following the timestamp, the resolver's potential compensation begins to increase with each passing millisecond, adding urgency to the transaction processing.
+
+2. **Rapid Execution Window**:
+   - For example, an RPC call requesting an ETH wallet balance from the Ethereum network has an expected completion threshold of under one second.
+   - Within this window, specifically the first 500 milliseconds, the resolver's remuneration rises progressively until it hits the user's maximum price threshold.
+
+3. **Incremental Payment Increase**:
+   - This design incentivizes resolvers to prioritize and quickly process requests, capitalizing on the rising remuneration leading up to the user's payment ceiling.
+
+4. **Ensuring Cost Control and Timely Services**:
+   - Users are protected from overpaying as the cost will not surpass the predetermined maximum limit.
+   - Resolvers undertaking the RPC call are obligated to fulfill the request within the time frame, ensuring that users are not charged beyond their set limit.
+
+### 5.2.2 Transaction Finalization and Payment Processing
+
+The execution and settlement of payments transpire as follows:
+
+1. **Auction Closure Upon RPC Call Commitment**:
+   - The moment a resolver commits to an RPC call, the Dutch auction for that request is concluded.
+   - The remuneration is then set, which will be at or below the maximum limit based on the lock-in timing.
+
+2. **Confirmed Compensation and Assured Execution**:
+   - The resolver is guaranteed the auction-determined remuneration upon the successful and timely execution of the RPC call.
+   - This system ensures that users receive prompt service, while relayers and resolvers are incentivized for their swift and efficient marketplace responses.
+
+By integrating this nuanced Dutch auction approach with off-chain payment channels, the 1inch P2P Decentralized Network ensures a user-focused, equitable, and transparent process for managing and prioritizing user requests, maintaining an equilibrium between user costs and the motivation for resolvers.
 
 ### 5.3 Encryption Mechanisms
 Encryption is integral to the security of the 1inch Network:

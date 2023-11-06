@@ -107,7 +107,132 @@ The governance of the 1inch Network is community-focused, with the **1INCH token
 
 In subsequent sections, we delve deeper into the technical implementation of these concepts, the economic models that support the network, and the wide array of applications that can be realized on this innovative infrastructure.
 
+## 4. Ensuring Privacy and Security
 
-## 4. Technical Architecture
+The 1inch P2P Decentralized Network is engineered with the highest standards of privacy and security at its core. The following components and strategies are key to maintaining this robust framework:
 
-Relayers are registered through an Ethereum smart contract, making their IP address and connection details publicly available for network connections. The RPC approach eliminates the need for DNS, as requests are sent directly to
+1. **End-to-End Encryption**:
+   All RPC requests and responses are encrypted end-to-end using asymmetric cryptography. When a User initiates a request, it is encrypted with the public key of the potential Resolver. Only the selected Resolver, who holds the corresponding private key, can decrypt and process the request. This ensures that sensitive data is unreadable by any intermediaries, such as Relayers or malicious actors who might intercept the communication.
+
+2. **Off-Chain Payment Channels**:
+   Transactions for services are conducted through off-chain payment channels. These channels not only enable high transaction throughput but also ensure that payment details remain confidential and are only known between the User and the Resolver. This preserves financial privacy and reduces on-chain bloat, leading to lower fees and faster settlements.
+
+3. **Anonymity Through Relayers**:
+   Relayers serve as the anonymous couriers of the network. They are designed to forward requests without having the ability to decrypt them, preventing any form of data snooping. By not storing or logging information about the User or the Resolvers, Relayers support the network’s stance on anonymity and privacy.
+
+4. **Resolver Anonymity and Security**:
+   Resolvers, while being service providers within the network, operate without revealing their identities to the Users or other network participants. They only provide a public key for the Users to encrypt their requests. Resolvers process the requests securely and respond with the same level of encryption. This setup minimizes the risk of targeted attacks against specific Resolvers.
+
+5. **Immutable and Transparent Registration of Relayers**:
+   Relayers must register their service parameters, such as IP address and supported protocols, on an Ethereum smart contract when they come online. Although this information is public, it does not compromise their role in maintaining User privacy, as they do not relay any identifying information. Unregistering from the smart contract removes the Relayer from the pool, ensuring that the list of active Relayers is always up-to-date and resistant to sybil attacks.
+
+6. **Decentralized Governance of Resolvers**:
+   The selection of top Resolvers is governed by the 1inch community through a staking mechanism where 1INCH token holders, by acquiring Unicorn Power (UP), can delegate their voting power. This process ensures that only the most trusted and high-performing Resolvers are white-listed, promoting a secure and reliable network.
+
+7. **Secure Node Discovery**:
+   Rather than relying on a traditional DNS system, the 1inch Network utilizes a decentralized approach to node discovery, mitigating the risk of DNS spoofing and related attacks. The discovery mechanism operates within the boundaries of blockchain technology, ensuring trust and verifiability.
+
+8. **Rate-Limiting and Anti-DDoS Measures**:
+   To prevent denial-of-service attacks, each request within the network requires a micro-payment. This economic barrier dissuades malicious actors from flooding the network with requests, as it would become prohibitively expensive. Additionally, this model encourages efficiency and prioritization of service requests based on User payments.
+
+By integrating these mechanisms, the 1inch P2P Decentralized Network is fortified against external threats and internal abuses, preserving the privacy and security of all participants and ensuring that the network remains resilient and robust in the face of evolving cybersecurity challenges.
+
+## 5. Technical Architecture
+
+The 1inch P2P Decentralized Network's technical architecture is designed to be resilient, scalable, and modular. It consists of several key components that work in concert to provide a decentralized service layer for Web3 applications.
+
+### 5.1 Network Nodes
+Network nodes in the 1inch P2P Network are categorized into three types:
+
+1. **Users (Thin Clients)**:
+    - Users interact with the network via dApps that act as thin clients.
+    - These clients are lightweight, requiring minimal resources to operate.
+    - They generate encrypted RPC requests and process responses from the network.
+
+2. **Relayers**:
+    - Relayers act as the network's routers, facilitating the transmission of messages.
+    - They register on an Ethereum smart contract to advertise their availability.
+    - Relayers are responsible for handling the encrypted traffic, maintaining privacy and data integrity without being privy to the content.
+
+3. **Resolvers**:
+    - Resolvers are service providers that execute the requests.
+    - They decrypt incoming messages, process the requested actions, and encrypt the responses.
+    - Top resolvers are selected via community governance, ensuring a trusted set of service providers.
+
+### 5.2 Off-Chain Payment Channels
+Off-chain payment channels are a critical component of the network's microtransaction framework, allowing for high-throughput and low-cost transactions.
+
+1. **Channel Establishment**:
+    - Users and Resolvers establish channels upon the first interaction.
+    - Channels are funded by the Users and secured by smart contracts.
+
+2. **Micro-Payments**:
+    - Users sign micro-payment transactions as part of their RPC request payloads.
+    - Resolvers validate these signatures and claim payments upon successful service delivery.
+
+### 5.3 Encryption Mechanisms
+Encryption is integral to the security of the 1inch Network:
+
+1. **Asymmetric Cryptography**:
+    - Public-private key pairs are used to encrypt and decrypt messages.
+    - This ensures that only intended resolvers can access the data within a request.
+
+2. **Secure Key Exchange**:
+    - Key exchange protocols facilitate the safe distribution of public keys.
+    - A decentralized public key infrastructure (PKI) prevents man-in-the-middle attacks.
+
+### 5.4 Smart Contract Layer
+Smart contracts on the Ethereum blockchain handle various administrative functions:
+
+1. **Registration of Relayers and Resolvers**:
+    - Relayers must register their endpoint information for discovery.
+    - Resolvers are registered along with their service offerings and public keys.
+
+2. **Staking and Governance**:
+    - The 1INCH token is used for staking and participating in governance decisions.
+    - Staking mechanisms are in place for selecting and endorsing resolvers.
+
+3. **Payment Settlement**:
+    - Final settlement of payments occurs on the blockchain, ensuring transparency and finality.
+
+### 5.5 Data Transport Protocols
+Multiple data transport protocols are supported to maximize compatibility and performance:
+
+1. **WebSockets**:
+    - Enables real-time bi-directional communication between clients and relayers.
+
+2. **WebTransport**:
+    - Allows low-latency streams, optimized for quick data transfer.
+
+3. **WebRTC**:
+    - Provides peer-to-peer communication capabilities, essential for decentralized operations.
+
+### 5.6 Network Discovery and Message Propagation
+The network leverages a decentralized yet robust discovery mechanism that is solely based on Ethereum smart contracts, negating the need for traditional DHTs or Gossip protocols.
+
+1. **Ethereum Smart Contract Registry**:
+    - Relayers register their presence on an Ethereum smart contract, indicating their availability to the network.
+    - The registry includes endpoint information such as supported protocols, IP addresses, and port details.
+    - This allows for a decentralized discovery process that is easily verifiable and trustless, leveraging the security and transparency of the Ethereum blockchain.
+
+2. **Message Routing**:
+    - Upon receiving an encrypted RPC request from a user, relayers forward the message to the appropriate resolver or set of resolvers based on the payment and service requirements.
+    - Relayers do not decrypt or inspect the contents of the traffic, ensuring user privacy and data integrity.
+
+3. **Dynamic Participation**:
+    - Relayers can dynamically join or leave the network by registering or deregistering in the smart contract.
+    - This allows for a fluid network topology that is resilient to changes and does not rely on any central point of failure.
+
+The integration of Ethereum smart contracts into the discovery and registration process ensures that the network remains open, transparent, and resistant to censorship. By utilizing blockchain technology, the 1inch P2P Decentralized Network provides a trust-minimized environment that fosters participation and innovation.
+
+### 5.7 High Availability and Load Balancing
+The network architecture is designed for high availability:
+
+1. **Redundancy**:
+    - Multiple relayers and resolvers ensure that services remain available even if individual nodes fail.
+
+2. **Load Balancing**:
+    - Requests are distributed across the network to prevent overloading of individual nodes.
+
+The technical architecture of the 1inch P2P Decentralized Network lays the foundation for a scalable and secure platform. It enables the creation of a wide range of decentralized services while preserving user privacy and data integrity. With its robust infrastructure, the network is poised to power the next generation of decentralized applications.
+

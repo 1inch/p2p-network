@@ -12,15 +12,101 @@ The 1inch Network not only revolutionizes the way services are hosted and access
 
 ## 1. Introduction
 
-Centralized hosting solutions are at odds with the decentralized ethos of web3. The 1inch Network proposes a P2P network to offer decentralized service alternatives and solve the problems of centralized control and vulnerability to service disruptions.
+As the web evolves into its third major iteration, an inherent contradiction has become apparent: the decentralized applications (dApps) and services that constitute the new web3 frontier are frequently dependent on centralized hosting solutions. This reliance poses a spectrum of risks, from heightened censorship to the prospect of entire services being discontinued by centralized entities. Recognizing the critical need for a truly decentralized infrastructure, the 1inch P2P Decentralized Network has been conceived.
+
+The 1inch P2P Decentralized Network is a bold leap forward, a peer-to-peer fabric designed specifically to support the next wave of innovation in the web3 space. It is not merely a network but an ecosystem that enables a new class of applications to flourish, free from the constraints and vulnerabilities of centralization. By leveraging blockchain technology and a native payment structure, this network is engineered to deliver services that are resilient, autonomous, and inherently aligned with the principles of a decentralized internet.
+
+In this P2P network, every participant is both a contributor and a beneficiary. Users, engaging through lightweight dApps, can interact with the network without sacrificing their privacy or exposing themselves to the whims of centralized service providers. Relayers serve as the connective tissue of the network, preserving privacy and enhancing efficiency, while resolvers carry the mantle of response and computation, embodying the decentralized spirit by providing services in exchange for micro-payments.
+
+The challenges of the current web3 landscape—centralized storage, file hosting, and DNS services—are addressed head-on by this network. By structurally incentivizing participation through economic means, the 1inch P2P Decentralized Network not only disincentivizes malicious activity such as DoS attacks but also creates a fertile ground for innovation and development.
+
+The cornerstone of the network's integrity is its governance model, which integrates community participation directly into the operational fabric of the system. Staking 1INCH tokens enables users to amass 'Unicorn Power,' granting them a say in the selection and endorsement of resolvers. This democratic approach ensures that the network remains true to its users' interests and resilient against takeover attempts.
+
+The introduction of the 1inch P2P Decentralized Network marks the beginning of a paradigm shift. It signifies a move away from the centralized architectures that currently underpin web3 and a step towards a decentralized future where users and developers enjoy uninterrupted access to services, fortified by the security and distributed nature of blockchain technology. In the following sections, we will delve into the network's architecture, the roles and incentives of its participants, and the rich tapestry of applications it enables.
 
 ## 2. Background
 
-Web3's reliance on centralized services undermines its decentralized promise. The 1inch Network's P2P approach aims to resolve this, offering decentralized alternatives to traditional web hosting and backend services.
+### 2.1 The Centralization Dilemma in Web3
 
-## 3. The 1inch Network Overview
+With the advent of blockchain technology and the subsequent proliferation of decentralized applications (dApps), there has been a paradigm shift towards what is commonly referred to as web3 — a user-centric internet where individuals have control over their data, identity, and transactions. This evolution promises to mitigate the shortcomings of the web2 era, characterized by data monopolies and centralized gatekeepers. However, the current state of web3 infrastructure is paradoxically reliant on centralized services such as cloud providers for hosting, storage, and domain name resolution. This reliance undermines the very ethos of decentralization, introducing points of failure and control that run counter to the ideals of the blockchain space.
 
-The network is comprised of three actor types: users, relayers, and resolvers. Users operate through a web3 dApp thin client, relayers function as proxies, and resolvers handle computation and data responses, with each role incentivized via a payment system.
+### 2.2 Challenges and Limitations
+
+Web3's dependence on centralized services not only creates vulnerabilities but also exposes dApps and their users to a myriad of risks, including censorship, service outages, and arbitrary discontinuation of services by providers. Additionally, the lack of decentralized domain name services (DNS) and hosting solutions constrains the potential of dApps and restricts the seamless user experience necessary for mass adoption. Moreover, backend services for dApps, which are crucial for complex operations and user interactions, remain predominantly centralized, creating bottlenecks and potential security concerns.
+
+### 2.3 Emerging Needs
+
+The growing awareness of these challenges has led to a consensus within the web3 community on the need for a robust, decentralized network that can provide the services and infrastructure necessary for the unencumbered operation of dApps. There is a clear demand for a system that not only supports file storage and dynamic content delivery but also ensures that all network interactions are secure, private, and resistant to censorship and attacks.
+
+### 2.4 1inch's Vision for Decentralization
+
+Against this backdrop, the 1inch Network has recognized an opportunity to contribute to the evolution of web3 infrastructure. Building on our expertise in developing decentralized finance (DeFi) solutions and leveraging the 1inch ecosystem's resources, we envision the creation of the 1inch P2P Decentralized Network. This network is designed to address the centralization concerns plaguing current web3 services by introducing a distributed layer of relayers and resolvers that function within a secure and incentivized payment protocol.
+
+The network aims to provide a resilient and scalable foundation for various products and services, including but not limited to decentralized file storage, streaming services, wallet balance information, decentralized order books, and blockchain RPC call handling. The architectural design of the 1inch P2P Decentralized Network allows for seamless interactions between users, relayers, and resolvers, facilitated by an innovative payment channel and a transparent, community-driven governance model.
+
+In the subsequent sections, we will explore the technical architecture of the 1inch P2P Decentralized Network, detailing the mechanisms through which it achieves decentralization, security, and functionality, thereby laying the groundwork for a truly decentralized web3 ecosystem.
+
+## 3. The 1inch P2P Decentralized Network Overview
+
+### 3.1 Conceptual Architecture
+
+The 1inch P2P Decentralized Network is predicated upon a peer-to-peer (P2P) topology, designed to operate without reliance on centralized servers or managed infrastructure. At its core, the network facilitates seamless interactions among its primary actors: Users, Relayers, and Resolvers.
+
+- **Users**: Participants who access the network via web3 applications (dApps). They initiate requests and provide micro-payments for services rendered.
+- **Relayers**: Nodes that act as intermediaries, relaying requests and responses between users and resolvers. They are compensated for their role in data transmission and maintaining network privacy.
+- **Resolvers**: Nodes responsible for processing user requests and delivering the required service or information. They are incentivized by payments corresponding to the complexity and resource consumption of the services provided.
+
+Each actor plays a critical role in the ecosystem, ensuring the network's decentralization, efficiency, and privacy.
+
+#### Network Topology ASCII Diagram
+
+~~~~sql
++---------+       +-----------+       +-----------+
+|         |<----->|           |<----->|           |
+|  User   |       |  Relayer  |       |  Resolver |
+| (Client)|<----->| (Proxy)   |<----->| (Service) |
+|         |       |           |       |           |
++---------+       +-----------+       +-----------+
+~~~~
+
+### 3.2 Network Interactions
+
+Interactions within the 1inch P2P Decentralized Network are designed to be secure, efficient, and decentralized, leveraging an encrypted Remote Procedure Call (RPC) approach for communication among actors. Here's a detailed overview:
+
+1. **User Request Initialization**:
+   A User creates an RPC request to perform a specific action or retrieve data. This request includes meta information such as the service required, parameters (e.g., `1inch_getWalletBalance` with network and token parameters), and a payment offer, all signed by the user.
+
+2. **Payment Signature and Encryption**:
+   The user signs the request with a unique payment signature via an off-chain payment channel. This signature outlines the maximum amount the user is willing to pay (e.g., $0.0001 max). The entire RPC call is then encrypted with the public keys of potential Resolvers to ensure privacy and security.
+
+3. **Relayer Transmission**:
+   The encrypted request is sent to a Relayer. The Relayer’s role is to act as a proxy, transmitting the request to multiple Resolvers without decrypting its content. This process maintains user anonymity and ensures that Relayers cannot tamper with or view sensitive request data.
+
+4. **Resolver Processing**:
+   Resolvers, upon receiving an encrypted request, use their private keys to decrypt the message. If they decide to process the request — typically based on the attached payment offer and their capacity — they execute the required operation, encrypt the response, and send it back to the Relayer.
+
+5. **Response and Payment Execution**:
+   The Relayer forwards the encrypted response back to the User. Once the User decrypts and validates the response, the payment channel processes the payment to the Resolver, completing the transaction.
+
+6. **Incentive Structure**:
+   Relayers are incentivized to efficiently forward messages as they receive a fee from the successful transactions they facilitate. Similarly, Resolvers are incentivized to respond promptly and accurately to requests that meet their cost criteria, as their payment is contingent upon the delivery of the requested service.
+
+The use of an encrypted RPC approach ensures that communication across the 1inch P2P Decentralized Network is secure, private, and tamper-evident. This system aligns with the network's overarching goals of decentralization and resistance to censorship, positioning the 1inch Network as a robust infrastructure for the next evolution of web3 services.
+
+### 3.3 Ensuring Privacy and Security
+
+The privacy and security of communications are paramount within the 1inch Network. Users sign their requests which include a payment offer, encrypt them with the public keys of potential **Resolvers**, and then send these requests through **Relayers** to ensure that only the intended Resolvers can read and respond to them.
+
+### 3.4 Dynamic Network Participation
+
+**Relayers** and **Resolvers** join the network by registering themselves via a smart contract on the Ethereum blockchain, which records their IP addresses and service capabilities. To maximize privacy, **Relayers** do not disclose information about the users or resolvers they connect, and they operate only as a transparent and neutral proxy within the network.
+
+### 3.5 Governance and Incentive Mechanisms
+
+The governance of the 1inch Network is community-focused, with the **1INCH token** holders possessing the ability to delegate their 'Unicorn Power' to endorse **Resolvers**. This stake-weighted system promotes a meritocratic structure where the top-performing and most reliable resolvers are white-listed and incentivized to maintain high service standards.
+
+In subsequent sections, we delve deeper into the technical implementation of these concepts, the economic models that support the network, and the wide array of applications that can be realized on this innovative infrastructure.
+
 
 ## 4. Technical Architecture
 

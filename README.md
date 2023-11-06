@@ -231,6 +231,10 @@ Multiple data transport protocols are supported to maximize compatibility and pe
 3. **WebRTC**:
     - Provides peer-to-peer communication capabilities, essential for decentralized operations.
 
+4. **Quick UDP Internet Connections (QUIC)**:
+   - QUIC is a transport layer network protocol designed by Google. The main benefits of QUIC over TCP and TLS/SSL include reduced connection and transport latency, and multiplexed streams without head-of-line blocking.
+
+
 ### 5.6 Network Discovery and Message Propagation
 The network leverages a decentralized yet robust discovery mechanism that is solely based on Ethereum smart contracts, negating the need for traditional DHTs or Gossip protocols.
 

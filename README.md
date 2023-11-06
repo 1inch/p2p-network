@@ -332,17 +332,15 @@ The 1inch P2P Decentralized Network serves as a versatile foundation for a multi
     - Content creators can stream directly to consumers within the network. Payment channels facilitate micropayments for streamed content, allowing for pay-per-view or subscription models.
     - The decentralized nature of the network eliminates single points of failure, ensuring that content is always accessible as long as nodes are online.
 
-### 7.3 Wallet Balance Information
+### 7.3 Wallet Balance Aggregator Service
 
-1. **Blockchain Data Retrieval**:
-    - DApp users can query the balance of any cryptocurrency wallet by sending an RPC request such as `1inch_getWalletBalance` to the network.
-    - Payment is made through the user's signed message in the meta information, specifying the maximum fee they are willing to pay.
+1. **Wallet Balances**:
+   - The network offers services to retrieve aggregated balances of all tokens in a user's wallet across multiple chains. This information is vital for users to manage their portfolios effectively, and it utilizes the network's secure and rapid data retrieval capabilities.
 
 ### 7.4 Decentralized Limit Order Services
 
 1. **Order Book Hosting**:
-    - Resolvers can maintain a decentralized order book for 1inch limit orders. This service ensures that orders are executed without the need for a centralized exchange.
-    - Smart contracts validate and execute the orders based on the criteria set by the users, offering a trustless trading environment.
+    - Resolvers can maintain a decentralized order book for 1inch limit orders. 
 
 ### 7.5 Decentralized Blockchain RPC Services
 

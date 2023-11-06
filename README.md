@@ -236,3 +236,52 @@ The network architecture is designed for high availability:
 
 The technical architecture of the 1inch P2P Decentralized Network lays the foundation for a scalable and secure platform. It enables the creation of a wide range of decentralized services while preserving user privacy and data integrity. With its robust infrastructure, the network is poised to power the next generation of decentralized applications.
 
+## 6. Community Governance and Resolver Selection
+
+In the 1inch P2P Decentralized Network, community governance plays a pivotal role in the selection and endorsement of Resolvers, which are the network's service providers. The governance process is underpinned by the 1INCH token and is designed to be democratic, transparent, and effective in maintaining high-quality service across the network.
+
+### 6.1 Staking and Unicorn Power (UP)
+
+1. **1INCH Token Staking**:
+    - Token holders can stake 1INCH tokens to participate in governance decisions. The staking mechanism is not only a financial commitment but also a means to gauge the community's sentiment.
+    - Staked tokens generate Unicorn Power (UP), a non-transferable credit that represents the voting power of stakeholders in the network.
+
+2. **Delegation of UP**:
+    - Stakeholders can delegate their UP to Resolvers they trust and support. This process democratizes the selection of Resolvers, making it community-driven.
+    - The delegation is flexible, allowing stakeholders to redistribute their UP as they see fit, according to the performance and reliability of the Resolvers.
+
+### 6.2 Resolver Selection Process
+
+1. **Top Resolvers**:
+    - Resolvers compete for UP delegations from the community. Only the top 10 Resolvers with the most UP become active and are allowed to process requests.
+    - This meritocratic system ensures that only the most reputable and reliable Resolvers are serving the user base.
+
+2. **Dynamic Leaderboard**:
+    - A public leaderboard displays the current rankings of Resolvers based on the UP they have attracted. The leaderboard is dynamic, reflecting real-time changes in stakeholder preferences.
+
+3. **Election Cycles**:
+    - Resolver elections happen in regular cycles. At the end of each cycle, the UP tally is counted, and the top Resolvers are selected for the next period.
+    - This periodic reset ensures that new participants have the opportunity to become Resolvers, fostering competition and innovation.
+
+### 6.3 Governance Proposals
+
+1. **Proposal Submission**:
+    - Any stakeholder with a minimum required amount of UP can submit proposals for consideration by the community.
+    - Proposals can range from changes in network parameters to the introduction of new features or policies.
+
+2. **Community Debate and Voting**:
+    - Proposals are debated in the community forums, where stakeholders can discuss their merits and potential impacts on the network.
+    - Voting is conducted in a transparent manner where each stakeholder's UP translates into votes. The outcome of votes directly influences the decision-making process.
+
+### 6.4 Transparency and Accountability
+
+1. **Public Auditing**:
+    - All governance activities, including UP delegations, voting, and the Resolver election results, are recorded on the blockchain, making them publicly auditable.
+    - The immutable nature of blockchain entries ensures that the process is tamper-proof and history cannot be rewritten.
+
+2. **Resolver Accountability**:
+    - Resolvers are accountable to the community that elected them. They must adhere to the network's service standards and are subject to removal if they underperform or act maliciously.
+    - Regular performance reviews and the threat of losing UP delegations create strong incentives for Resolvers to maintain high standards of service.
+
+The community governance model is at the heart of the 1inch P2P Decentralized Network's ethos. It aligns the interests of all network participants, from token holders to service providers, ensuring a harmonious and progressive ecosystem. The Resolver selection process, underpinned by transparent and democratic principles, facilitates a self-regulating environment where the best service providers thrive.
+

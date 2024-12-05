@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+option go_package = ".";
+package proto;
+
+message ResolverRequest {
+  string id = 1;
+  bytes payload = 2;
+}
+
+enum ResolverResponseStatus {
+  RESOLVER_OK = 0;
+  RESOLVER_ERROR = 1;
+}
+
+message ResolverResponse {
+  string id = 1;
+  bytes payload = 2;
+  ResolverResponseStatus status = 3;
+}
+
+
+service Execute {
+  rpc Execute(ResolverRequest) returns (ResolverResponse);
+}
+

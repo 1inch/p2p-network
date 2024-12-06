@@ -1,0 +1,2 @@
+relayer.grpc_address: 127.0.0.1:0
+relayer.log_level: debug

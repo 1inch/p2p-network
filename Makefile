@@ -9,3 +9,18 @@ protobuf:
 
 resolver:
 	go run ./resolver
+
+.PHONY: build_relayer
+build_relayer:
+	@go build -o bin/relayer ./cmd/relayer/
+
+.PHONY: build
+build: build_relayer
+
+.PHONY: clean_build
+clean_build: clean protobuf build
+
+.PHONY: clean
+clean: # for local usage
+	@rm -rf bin/*
+	@rm -rf proto/*.pb.go

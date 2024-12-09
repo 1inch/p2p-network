@@ -1,4 +1,4 @@
-.PHONY: resolver
+.PHONY: resolver test-resolver
 
 golang-deps:
 	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.62
@@ -48,3 +48,6 @@ testsum:
 .PHONY: test_quick
 test_quick:
 	@go test -v ./...
+
+make test-resolver:
+	go test github.com/1inch/p2p-network/resolver/rpc

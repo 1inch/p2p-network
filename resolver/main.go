@@ -1,3 +1,4 @@
+// Package main represents resolver node.
 package main
 
 import (
@@ -24,5 +25,8 @@ func main() {
 
 	grpcServer := grpc.NewServer(opts...)
 	pb.RegisterExecuteServer(grpcServer, rpc.NewRpcServer())
-	grpcServer.Serve(lis)
+	err = grpcServer.Serve(lis)
+	if err != nil {
+		log.Fatalf("failed to serve: %v\n", err)
+	}
 }

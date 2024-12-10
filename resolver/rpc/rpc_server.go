@@ -1,3 +1,4 @@
+// Package rpc represents GRPC server.
 package rpc
 
 import (
@@ -6,15 +7,18 @@ import (
 	pb "github.com/1inch/p2p-network/proto"
 )
 
-type RpcServer struct {
+// Server represents gRPC server.
+type Server struct {
 	pb.UnimplementedExecuteServer
 }
 
-func NewRpcServer() *RpcServer {
-	return &RpcServer{}
+// NewRpcServer creates new RpcServer.
+func NewRpcServer() *Server {
+	return &Server{}
 }
 
-func (s *RpcServer) Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
+// Execute executes ResolverRequest.
+func (s *Server) Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
 	response := &pb.ResolverResponse{
 		Id:      req.Id,
 		Payload: make([]byte, 0),

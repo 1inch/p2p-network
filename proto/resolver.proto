@@ -23,4 +23,3 @@ message ResolverResponse {
 service Execute {
   rpc Execute(ResolverRequest) returns (ResolverResponse);
 }
-

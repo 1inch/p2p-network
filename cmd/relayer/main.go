@@ -32,7 +32,7 @@ func main() {
 				Action: func(c *cli.Context) error {
 					leveler := new(slog.LevelVar)
 					leveler.Set(slog.LevelInfo)
-					handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+					handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 						Level: leveler,
 					})
 					logger := slog.New(handler)
@@ -73,7 +73,7 @@ func main() {
 	}
 
 	if err := app.Run(os.Args); err != nil {
-		handler := slog.NewJSONHandler(os.Stdout, nil)
+		handler := slog.NewTextHandler(os.Stdout, nil)
 		logger := slog.New(handler)
 		logger.Error("failed to run relayer node CLI interface", slog.Any("err", err))
 	}

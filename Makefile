@@ -50,4 +50,4 @@ test_quick:
 	@go test -v ./...
 
 make test-resolver:
-	go test github.com/1inch/p2p-network/resolver/rpc
+	go test -v github.com/1inch/p2p-network/resolver/rpc

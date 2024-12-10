@@ -4,23 +4,23 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net"
 	"net/http"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
 
 // Server wraps the http.Server and logger.
 type Server struct {
-	logger *logrus.Logger
+	logger *slog.Logger
 	lis    net.Listener
 	server *http.Server
 }
 
 // New creates a new Server instance.
-func New(logger *logrus.Logger, lis net.Listener, handler http.Handler) *Server {
+func New(logger *slog.Logger, lis net.Listener, handler http.Handler) *Server {
 	server := &http.Server{
 		Handler: handler,
 	}
@@ -39,7 +39,7 @@ func (s *Server) Run(ctx context.Context) error {
 	// Start serving HTTP requests
 	g.Go(func() error {
 		if err := s.server.Serve(s.lis); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			s.logger.WithError(err).WithField("addr", s.Addr()).Error("http server error")
+			s.logger.Error("http server error", slog.String("addr", s.Addr()), slog.Any("err", err))
 			return err
 		}
 		return nil
@@ -54,7 +54,7 @@ func (s *Server) Run(ctx context.Context) error {
 		s.logger.Info("shutting down http server")
 
 		if err := s.server.Shutdown(shutdownCtx); err != nil {
-			s.logger.WithError(err).Error("error shutting down http server")
+			s.logger.Error("error shutting down http server", slog.Any("err", err))
 			return err
 		}
 

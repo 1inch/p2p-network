@@ -10,7 +10,7 @@ type Config struct {
 // DefaultConfig returns default configuration for the relayer node.
 func DefaultConfig() Config {
 	return Config{
-		LogLevel:        "debug",
+		LogLevel:        "DEBUG",
 		HTTPEndpoint:    "127.0.0.1:0",
 		WebRTCICEServer: "stun:stun1.l.google.com:19302",
 	}

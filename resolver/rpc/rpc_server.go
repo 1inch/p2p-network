@@ -6,10 +6,13 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"log/slog"
 	"os"
 
 	pb "github.com/1inch/p2p-network/proto"
+	"github.com/1inch/p2p-network/resolver/api"
+	"github.com/1inch/p2p-network/resolver/types"
 	"google.golang.org/grpc"
 )
 
@@ -28,6 +31,8 @@ type Server struct {
 	logger *slog.Logger
 
 	grpcServer *grpc.Server
+
+	handler api.Handler
 }
 
 func generateKey() (*rsa.PrivateKey, error) {
@@ -39,23 +44,48 @@ func generateKey() (*rsa.PrivateKey, error) {
 	return p, nil
 }
 
-// NewRpcServer creates new RpcServer.
-func newServer(logLevel slog.Level) (*Server, error) {
+// newServer creates new RpcServer.
+func newServer(apiHandler api.Handler) (*Server, error) {
 	privKey, err := generateKey()
 	if err != nil {
 		return nil, err
 	}
 
-	return &Server{privateKey: privKey, logger: slog.New(slog.NewTextHandler(os.Stdout, nil))}, nil
+	return &Server{privateKey: privKey, logger: slog.New(slog.NewTextHandler(os.Stdout, nil)), handler: apiHandler}, nil
+}
+
+func (s *Server) processRequest(req *pb.ResolverRequest) ([]byte, error) {
+	// Unmarshal JSON
+	var jsonReq types.JsonRequest
+	err := json.Unmarshal(req.Payload, &jsonReq)
+	if err != nil {
+		return nil, err
+	}
+
+	jsonResp := s.handler.Process(&jsonReq)
+	byteArr, err := json.Marshal(jsonResp)
+	if err != nil {
+		return nil, err
+	}
+	return byteArr, nil
 }
 
 // Execute executes ResolverRequest.
 func (s *Server) Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
 	s.logger.Info("###Incoming request", "id", req.Id)
+	resp, err := s.processRequest(req)
+	var respStatus pb.ResolverResponseStatus
+	if err != nil {
+		respStatus = pb.ResolverResponseStatus_RESOLVER_ERROR
+		slog.Error("processRequest() error", "err", err)
+	} else {
+		respStatus = pb.ResolverResponseStatus_RESOLVER_OK
+	}
+
 	response := &pb.ResolverResponse{
 		Id:      req.Id,
-		Payload: req.Payload,
-		Status:  pb.ResolverResponseStatus_RESOLVER_OK,
+		Payload: resp,
+		Status:  respStatus,
 	}
 	return response, nil
 }

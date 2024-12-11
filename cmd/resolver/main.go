@@ -11,12 +11,12 @@ import (
 // TODO: setup cli interface
 func main() {
 	app := &cli.App{
-		Name:  "relayer",
-		Usage: "Relayer node",
+		Name:  "resolver",
+		Usage: "Resolver node",
 		Commands: []cli.Command{
 			{
 				Name:  "run",
-				Usage: "Runs relayer node",
+				Usage: "Runs resolver node",
 				Action: func(c *cli.Context) error {
 					node, err := relayer.New()
 					if err != nil {

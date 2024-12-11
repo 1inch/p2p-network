@@ -3,7 +3,6 @@ package rpc
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"net"
 	"testing"
@@ -78,11 +77,18 @@ func (h *TestApiHandler) Process(req *types.JsonRequest) *types.JsonResponse {
 	case "GetWalletBalance":
 		return &types.JsonResponse{Id: req.Id, Result: defaultBalance, Error: nil}
 	default:
-		return &types.JsonResponse{Id: req.Id, Result: 0, Error: errors.New("Unrecognized method")}
+		return &types.JsonResponse{Id: req.Id, Result: 0, Error: "Unrecognized method"}
 	}
 }
-func (s *ResolverTestSuite) getWalletBalancePayload() []byte {
+func (s *ResolverTestSuite) getWalletBalancePayloadOk() []byte {
 	jsonReq := &types.JsonRequest{Id: "1", Method: "GetWalletBalance", Params: []string{"0x0ADfCCa4B2a1132F82488546AcA086D7E24EA324", "latest"}}
+	byteArr, _ := json.Marshal(jsonReq)
+
+	return byteArr
+}
+
+func (s *ResolverTestSuite) getWalletBalancePayloadMissingMethod() []byte {
+	jsonReq := &types.JsonRequest{Id: "1", Method: "MissingMethod", Params: []string{"0x0ADfCCa4B2a1132F82488546AcA086D7E24EA324", "latest"}}
 	byteArr, _ := json.Marshal(jsonReq)
 
 	return byteArr
@@ -90,7 +96,7 @@ func (s *ResolverTestSuite) getWalletBalancePayload() []byte {
 
 func (s *ResolverTestSuite) TestExecute() {
 
-	req := &pb.ResolverRequest{Id: "1", Payload: s.getWalletBalancePayload(), Encrypted: false}
+	req := &pb.ResolverRequest{Id: "1", Payload: s.getWalletBalancePayloadOk(), Encrypted: false}
 
 	slog.Info("###about to execute")
 	resp, err := s.client.Execute(context.Background(), req)
@@ -104,4 +110,22 @@ func (s *ResolverTestSuite) TestExecute() {
 	s.Require().NoError(err)
 	s.Require().Equal(jsonResp.Id, req.Id)
 	s.Require().Equal(int(jsonResp.Result.(float64)), defaultBalance)
+}
+
+func (s *ResolverTestSuite) TestExecuteMissingMethod() {
+
+	req := &pb.ResolverRequest{Id: "1", Payload: s.getWalletBalancePayloadMissingMethod(), Encrypted: false}
+
+	slog.Info("###about to execute")
+	resp, err := s.client.Execute(context.Background(), req)
+	if err != nil {
+		slog.Info("Execute error", "error", err)
+		s.Require().Fail("execute error")
+	}
+	slog.Info("test output", "resp", resp)
+	var jsonResp types.JsonResponse
+	err = json.Unmarshal(resp.Payload, &jsonResp)
+	s.Require().NoError(err)
+	s.Require().Equal(jsonResp.Id, req.Id)
+	s.Require().Equal("Unrecognized method", jsonResp.Error)
 }

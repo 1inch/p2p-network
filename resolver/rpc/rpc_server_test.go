@@ -75,7 +75,11 @@ type TestApiHandler struct{}
 func (h *TestApiHandler) Process(req *types.JsonRequest) *types.JsonResponse {
 	switch req.Method {
 	case "GetWalletBalance":
-		return &types.JsonResponse{Id: req.Id, Result: defaultBalance, Error: nil}
+		if len(req.Params[0]) > 0 {
+			return &types.JsonResponse{Id: req.Id, Result: defaultBalance, Error: nil}
+		} else {
+			return &types.JsonResponse{Id: req.Id, Result: 0, Error: "Missing address"}
+		}
 	default:
 		return &types.JsonResponse{Id: req.Id, Result: 0, Error: "Unrecognized method"}
 	}
@@ -94,6 +98,12 @@ func (s *ResolverTestSuite) getWalletBalancePayloadMissingMethod() []byte {
 	return byteArr
 }
 
+func (s *ResolverTestSuite) getWalletBalancePayloadWrongParams() []byte {
+	jsonReq := &types.JsonRequest{Id: "1", Method: "GetWalletBalance", Params: []string{"", "latest"}}
+	byteArr, _ := json.Marshal(jsonReq)
+
+	return byteArr
+}
 func (s *ResolverTestSuite) TestExecute() {
 
 	req := &pb.ResolverRequest{Id: "1", Payload: s.getWalletBalancePayloadOk(), Encrypted: false}
@@ -128,4 +138,22 @@ func (s *ResolverTestSuite) TestExecuteMissingMethod() {
 	s.Require().NoError(err)
 	s.Require().Equal(jsonResp.Id, req.Id)
 	s.Require().Equal("Unrecognized method", jsonResp.Error)
+}
+
+func (s *ResolverTestSuite) TestExecuteMissingAddress() {
+
+	req := &pb.ResolverRequest{Id: "1", Payload: s.getWalletBalancePayloadWrongParams(), Encrypted: false}
+
+	slog.Info("###about to execute")
+	resp, err := s.client.Execute(context.Background(), req)
+	if err != nil {
+		slog.Info("Execute error", "error", err)
+		s.Require().Fail("execute error")
+	}
+	slog.Info("test output", "resp", resp)
+	var jsonResp types.JsonResponse
+	err = json.Unmarshal(resp.Payload, &jsonResp)
+	s.Require().NoError(err)
+	s.Require().Equal(jsonResp.Id, req.Id)
+	s.Require().Equal("Missing address", jsonResp.Error)
 }

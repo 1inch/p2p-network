@@ -1,25 +1,23 @@
-// Package rpc represents GRPC server.
-package rpc
+// Package resolver implements the gRPC server
+package resolver
 
 import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/x509"
 	"encoding/json"
 	"log/slog"
 	"os"
 
 	pb "github.com/1inch/p2p-network/proto"
-	"github.com/1inch/p2p-network/resolver/api"
 	"github.com/1inch/p2p-network/resolver/types"
 	"google.golang.org/grpc"
 )
 
+// Config represents basic server config
 type Config struct {
 	Port     int
 	LogLevel slog.Level
-	Testing  bool
 }
 
 // Server represents gRPC server.
@@ -32,7 +30,7 @@ type Server struct {
 
 	grpcServer *grpc.Server
 
-	handler api.Handler
+	handler ApiHandler
 }
 
 func generateKey() (*rsa.PrivateKey, error) {
@@ -45,13 +43,13 @@ func generateKey() (*rsa.PrivateKey, error) {
 }
 
 // newServer creates new RpcServer.
-func newServer(apiHandler api.Handler) (*Server, error) {
+func newServer(apiHandler ApiHandler) (*Server, error) {
 	privKey, err := generateKey()
 	if err != nil {
 		return nil, err
 	}
 
-	return &Server{privateKey: privKey, logger: slog.New(slog.NewTextHandler(os.Stdout, nil)), handler: apiHandler}, nil
+	return &Server{privateKey: privKey, logger: slog.New(slog.NewTextHandler(os.Stdout, nil)).With("module", "server"), handler: apiHandler}, nil
 }
 
 func (s *Server) processRequest(req *pb.ResolverRequest) ([]byte, error) {
@@ -88,12 +86,4 @@ func (s *Server) Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.Reso
 		Status:  respStatus,
 	}
 	return response, nil
-}
-
-func (s *Server) GetPublicKey(ctx context.Context) ([]byte, error) {
-	byteArr, err := x509.MarshalPKIXPublicKey(s.privateKey.Public())
-	if err != nil {
-		return nil, err
-	}
-	return byteArr, nil
 }

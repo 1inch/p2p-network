@@ -12,7 +12,6 @@ linters:
     - errcheck                # find unchecked errors
     - errorlint               # finds misuses of errors
     - gocritic                # checks for style, performance issues, and common programming errors
-    - godot                   # dots for everything
     - goerr113                # check error expressions
     - gofmt                   # sanity check formatting
     - goprintffuncname        # checks that printf-like functions are named with `f` at the end [fast: true, auto-fix: false]
@@ -165,7 +164,6 @@ linters-settings:
     # Default: false
     multi-func: true
   sloglint:
-    attr-only: true
 
 issues:
   max-issues-per-linter: 0

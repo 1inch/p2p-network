@@ -1,4 +1,4 @@
-package rpc
+package resolver
 
 import (
 	"context"
@@ -49,7 +49,7 @@ func (s *ResolverTestSuite) SetupTest() {
 	slog.Info("### Server started")
 	s.server = grpcServer
 
-	conn, err := grpc.DialContext(context.Background(), "", grpc.WithContextDialer(
+	conn, err := grpc.NewClient("passthrough://bufnet", grpc.WithContextDialer(
 		func(context.Context, string) (net.Conn, error) {
 			return listener.Dial()
 		}), grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -63,7 +63,7 @@ func (s *ResolverTestSuite) SetupTest() {
 
 func (s *ResolverTestSuite) TearDownTest() {
 	s.server.GracefulStop()
-	s.conn.Close()
+	s.Require().NoError(s.conn.Close())
 }
 
 func TestResolverTestSuite(t *testing.T) {
@@ -76,7 +76,7 @@ func (h *TestApiHandler) Process(req *types.JsonRequest) *types.JsonResponse {
 	switch req.Method {
 	case "GetWalletBalance":
 		if len(req.Params[0]) > 0 {
-			return &types.JsonResponse{Id: req.Id, Result: defaultBalance, Error: nil}
+			return &types.JsonResponse{Id: req.Id, Result: defaultBalance}
 		} else {
 			return &types.JsonResponse{Id: req.Id, Result: 0, Error: "Missing address"}
 		}
@@ -104,8 +104,8 @@ func (s *ResolverTestSuite) getWalletBalancePayloadWrongParams() []byte {
 
 	return byteArr
 }
-func (s *ResolverTestSuite) TestExecute() {
 
+func (s *ResolverTestSuite) TestExecute() {
 	req := &pb.ResolverRequest{Id: "1", Payload: s.getWalletBalancePayloadOk(), Encrypted: false}
 
 	slog.Info("###about to execute")
@@ -123,7 +123,6 @@ func (s *ResolverTestSuite) TestExecute() {
 }
 
 func (s *ResolverTestSuite) TestExecuteMissingMethod() {
-
 	req := &pb.ResolverRequest{Id: "1", Payload: s.getWalletBalancePayloadMissingMethod(), Encrypted: false}
 
 	slog.Info("###about to execute")
@@ -141,7 +140,6 @@ func (s *ResolverTestSuite) TestExecuteMissingMethod() {
 }
 
 func (s *ResolverTestSuite) TestExecuteMissingAddress() {
-
 	req := &pb.ResolverRequest{Id: "1", Payload: s.getWalletBalancePayloadWrongParams(), Encrypted: false}
 
 	slog.Info("###about to execute")

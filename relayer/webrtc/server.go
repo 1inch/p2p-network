@@ -14,14 +14,18 @@ import (
 var (
 	// ErrInvalidICEServer error represents invalid ICE server config.
 	ErrInvalidICEServer = errors.New("invalid ICE server configuration")
+	// ErrDataChannelNotFound error represents missing data channel.
+	ErrDataChannelNotFound = errors.New("data channel not found for session")
 )
 
+// SDPRequest represents SDP request.
 type SDPRequest struct {
 	SessionID string
 	Offer     webrtc.SessionDescription
 	Response  chan *webrtc.SessionDescription
 }
 
+// Server wraps the webrtc.Server.
 type Server struct {
 	logger       *slog.Logger
 	ICEServer    string
@@ -35,7 +39,7 @@ type Server struct {
 // New initializes a new WebRTC server.
 func New(logger *slog.Logger, iceServer string, sdpRequests <-chan SDPRequest) (*Server, error) {
 	if iceServer == "" {
-		return nil, fmt.Errorf("invalid ICE server configuration")
+		return nil, ErrInvalidICEServer
 	}
 
 	return &Server{
@@ -130,7 +134,7 @@ func (w *Server) SendMessage(sessionID, message string) error {
 
 	dc, ok := w.dataChannels[sessionID]
 	if !ok {
-		return fmt.Errorf("data channel not found for session: %s", sessionID)
+		return ErrDataChannelNotFound
 	}
 
 	if err := dc.SendText(message); err != nil {

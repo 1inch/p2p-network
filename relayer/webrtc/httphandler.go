@@ -8,7 +8,7 @@ import (
 	"github.com/pion/webrtc/v3"
 )
 
-// SDPHandler handles SDP request
+// SDPHandler handles SDP request.
 func SDPHandler(logger *slog.Logger, sdpRequests chan SDPRequest) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
@@ -38,6 +38,10 @@ func SDPHandler(logger *slog.Logger, sdpRequests chan SDPRequest) http.HandlerFu
 		}{Answer: *answer}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		err := json.NewEncoder(w).Encode(resp)
+		if err != nil {
+			http.Error(w, "failed to encode response", http.StatusInternalServerError)
+			return
+		}
 	}
 }

@@ -17,7 +17,7 @@ func TestWebRTCServer_HandleSDP(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(nil, nil))
 	sdpRequests := make(chan relayerwebrtc.SDPRequest, 1)
 
-	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", sdpRequests)
+	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", nil, sdpRequests)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
 	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{
@@ -69,7 +69,7 @@ func TestWebRTCServer_Run_CleanupOnContextCancel(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(nil, nil))
 	sdpRequests := make(chan relayerwebrtc.SDPRequest, 1)
 
-	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", sdpRequests)
+	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", nil, sdpRequests)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
 	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
@@ -122,7 +122,7 @@ func TestWebRTCServer_Run_Shutdown(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(nil, nil))
 	sdpRequests := make(chan relayerwebrtc.SDPRequest, 1)
 
-	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", sdpRequests)
+	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", nil, sdpRequests)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -155,7 +155,7 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 		assert.Equal(t, message, receivedMessage, "Message mismatch")
 	}
 
-	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", sdpRequests)
+	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", nil, sdpRequests)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 	server.OnMessage = onMessage
 

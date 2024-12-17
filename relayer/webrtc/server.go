@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/pion/webrtc/v3"
+	"github.com/pion/webrtc/v4"
 )
 
 var (
@@ -32,7 +32,7 @@ type Server struct {
 	sdpRequests  <-chan SDPRequest
 	connections  map[string]*webrtc.PeerConnection
 	dataChannels map[string]*webrtc.DataChannel
-	mu           sync.Mutex
+	mu           sync.RWMutex
 	OnMessage    func(sessionID, message string) // Callback for incoming messages
 }
 
@@ -53,9 +53,6 @@ func New(logger *slog.Logger, iceServer string, sdpRequests <-chan SDPRequest) (
 
 // HandleSDP processes an SDP offer, sets up a PeerConnection, and generates an SDP answer.
 func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*webrtc.SessionDescription, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{{URLs: []string{w.ICEServer}}},
 	})
@@ -63,15 +60,30 @@ func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*
 		return nil, fmt.Errorf("failed to create peer connection: %w", err)
 	}
 
-	// Handle DataChannel setup
+	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
+		w.logger.Debug("connection state change", slog.String("state", state.String()))
+
+		if state == webrtc.PeerConnectionStateClosed || state == webrtc.PeerConnectionStateFailed {
+			w.mu.Lock()
+			delete(w.connections, sessionID)
+			delete(w.dataChannels, sessionID)
+			w.mu.Unlock()
+		}
+	})
+
+	// Handle DataChannel setup.
 	pc.OnDataChannel(func(dc *webrtc.DataChannel) {
-		w.logger.Info("data channel opened", slog.String("label", dc.Label()))
+		w.logger.Info("establishing data channel", slog.String("label", dc.Label()))
 
 		w.mu.Lock()
 		w.dataChannels[sessionID] = dc
 		w.mu.Unlock()
 
-		// Handle incoming messages
+		dc.OnOpen(func() {
+			w.logger.Info("data channel opened", slog.String("label", dc.Label()))
+		})
+
+		// Handle incoming messages.
 		dc.OnMessage(func(msg webrtc.DataChannelMessage) {
 			message := string(msg.Data)
 			w.logger.Debug("received message", slog.String("session_id", sessionID), slog.String("message", message))
@@ -82,17 +94,12 @@ func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*
 		})
 	})
 
-	o, err := pc.CreateOffer(nil)
-	if err != nil {
-		return nil, fmt.Errorf("offer create offer error: %w", err)
-	}
-
-	// Set remote SDP description (offer)
-	if err := pc.SetRemoteDescription(o); err != nil {
+	// Set remote SDP description (offer).
+	if err := pc.SetRemoteDescription(offer); err != nil {
 		return nil, fmt.Errorf("failed to set remote description: %w", err)
 	}
 
-	// Generate and set local SDP description (answer)
+	// Generate and set local SDP description (answer).
 	answer, err := pc.CreateAnswer(nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create answer: %w", err)
@@ -101,9 +108,11 @@ func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*
 		return nil, fmt.Errorf("failed to set local description: %w", err)
 	}
 
-	// Store the PeerConnection
+	// Store the PeerConnection.
+	w.mu.Lock()
 	w.connections[sessionID] = pc
-	w.logger.Info("peer connection established", slog.String("session_id", sessionID))
+	w.mu.Unlock()
+
 	return &answer, nil
 }
 
@@ -112,13 +121,15 @@ func (w *Server) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			w.logger.Info("shutting down webrtc server")
 			w.cleanup()
 			return nil
-		case req := <-w.sdpRequests:
+		case req, ok := <-w.sdpRequests:
+			if !ok {
+				return nil
+			}
 			answer, err := w.HandleSDP(req.SessionID, req.Offer)
 			if err != nil {
-				w.logger.Error("Failed to process sdp offer", slog.String("error", err.Error()))
+				w.logger.Error("Failed to process SDP offer", slog.String("error", err.Error()))
 				req.Response <- nil
 			} else {
 				req.Response <- answer
@@ -129,10 +140,10 @@ func (w *Server) Run(ctx context.Context) error {
 
 // SendMessage sends a message over the DataChannel associated with the given session ID.
 func (w *Server) SendMessage(sessionID, message string) error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
+	w.mu.RLock()
 	dc, ok := w.dataChannels[sessionID]
+	w.mu.RUnlock()
+
 	if !ok {
 		return ErrDataChannelNotFound
 	}
@@ -141,27 +152,25 @@ func (w *Server) SendMessage(sessionID, message string) error {
 		return fmt.Errorf("failed to send message: %w", err)
 	}
 
-	w.logger.Debug("message sent", slog.String("session_id", sessionID), slog.String("message", message))
 	return nil
 }
 
 // GetConnection retrieves a PeerConnection by session ID.
 func (w *Server) GetConnection(sessionID string) (*webrtc.PeerConnection, bool) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	w.mu.RLock()
 	pc, ok := w.connections[sessionID]
+	w.mu.RUnlock()
 	return pc, ok
 }
 
 // GetAllConnections retrieves all active PeerConnection session IDs.
 func (w *Server) GetAllConnections() []string {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
+	w.mu.RLock()
 	sessions := make([]string, 0, len(w.connections))
 	for sessionID := range w.connections {
 		sessions = append(sessions, sessionID)
 	}
+	w.mu.RUnlock()
 	return sessions
 }
 
@@ -170,14 +179,10 @@ func (w *Server) cleanup() {
 	defer w.mu.Unlock()
 
 	for sessionID, pc := range w.connections {
-		w.logger.Info("closing peer connection", slog.String("session_id", sessionID))
 		if err := pc.Close(); err != nil {
 			w.logger.Error("failed to close peer connection", slog.String("session_id", sessionID), slog.String("error", err.Error()))
 		}
-		delete(w.connections, sessionID)
 	}
-
-	// Clear dataChannels
+	w.connections = make(map[string]*webrtc.PeerConnection)
 	w.dataChannels = make(map[string]*webrtc.DataChannel)
-	w.logger.Info("webrtc server shutdown completed")
 }

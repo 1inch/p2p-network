@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/1inch/p2p-network/relayer/grpc"
 	"github.com/1inch/p2p-network/relayer/httpapi"
 	"github.com/1inch/p2p-network/relayer/webrtc"
 	"golang.org/x/sync/errgroup"
@@ -42,7 +43,12 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 	{
 		// setup webrtc listener.
 		var err error
-		werbrtcServer, err = webrtc.New(logger.WithGroup("webrtc"), cfg.WebRTCICEServer, sdpRequests)
+		grpcClient, err := grpc.New(cfg.GRPCServerAddress)
+		if err != nil {
+			logger.Error("failed to initialize gRPC client", slog.Any("err", err))
+			return nil, err
+		}
+		werbrtcServer, err = webrtc.New(logger.WithGroup("webrtc"), cfg.WebRTCICEServer, grpcClient, sdpRequests)
 		if err != nil {
 			logger.Error("failed to create webrtc server", slog.String("iceserver", cfg.WebRTCICEServer), slog.Any("err", err))
 			return nil, err

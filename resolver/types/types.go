@@ -14,3 +14,6 @@ type JsonResponse struct {
 	Result interface{} `json:"result"`
 	Error  string      `json:"error"`
 }
+
+// JsonResponses is a map from API names to JSON responses
+type JsonResponses map[string]JsonResponse

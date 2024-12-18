@@ -1,4 +1,4 @@
-.PHONY: resolver test-resolver
+.PHONY: resolver test-resolver test-infura
 
 golang-deps:
 	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.62
@@ -54,3 +54,6 @@ test_quick:
 
 make test-resolver:
 	go test -v github.com/1inch/p2p-network/resolver ./resolver/...
+
+make test-infura:
+	go test -v github.com/1inch/p2p-network/resolver -testify.m=TestInfuraEndpoint

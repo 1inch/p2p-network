@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"os"
 
@@ -13,12 +14,6 @@ import (
 	"github.com/1inch/p2p-network/resolver/types"
 	"google.golang.org/grpc"
 )
-
-// Config represents basic server config
-type Config struct {
-	Port     int
-	LogLevel slog.Level
-}
 
 // Server represents gRPC server.
 type Server struct {
@@ -30,7 +25,7 @@ type Server struct {
 
 	grpcServer *grpc.Server
 
-	handler ApiHandler
+	handlers []ApiHandler
 }
 
 func generateKey() (*rsa.PrivateKey, error) {
@@ -42,14 +37,18 @@ func generateKey() (*rsa.PrivateKey, error) {
 	return p, nil
 }
 
+var errNoHandlers = errors.New("No API handlers passed to server")
+
 // newServer creates new RpcServer.
-func newServer(apiHandler ApiHandler) (*Server, error) {
+func newServer(handlers []ApiHandler) (*Server, error) {
+	if len(handlers) == 0 {
+		return nil, errNoHandlers
+	}
 	privKey, err := generateKey()
 	if err != nil {
 		return nil, err
 	}
-
-	return &Server{privateKey: privKey, logger: slog.New(slog.NewTextHandler(os.Stdout, nil)).With("module", "server"), handler: apiHandler}, nil
+	return &Server{privateKey: privKey, logger: slog.New(slog.NewTextHandler(os.Stdout, nil)).With("module", "server"), handlers: handlers}, nil
 }
 
 func (s *Server) processRequest(req *pb.ResolverRequest) ([]byte, error) {
@@ -60,11 +59,16 @@ func (s *Server) processRequest(req *pb.ResolverRequest) ([]byte, error) {
 		return nil, err
 	}
 
-	jsonResp := s.handler.Process(&jsonReq)
-	byteArr, err := json.Marshal(jsonResp)
+	jsonResponses := make(map[string]interface{})
+	for _, h := range s.handlers {
+		jsonResp := h.Process(&jsonReq)
+		jsonResponses[h.Name()] = jsonResp
+	}
+	byteArr, err := json.Marshal(jsonResponses)
 	if err != nil {
 		return nil, err
 	}
+
 	return byteArr, nil
 }
 

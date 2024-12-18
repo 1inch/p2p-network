@@ -72,7 +72,10 @@ func TestWebRTCServer_Run_CleanupOnContextCancel(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(nil, nil))
 	sdpRequests := make(chan relayerwebrtc.SDPRequest, 1)
 
-	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", nil, sdpRequests)
+	mockGRPCClient := &mockGRPCClient{}
+	mockGRPCClient.On("Close").Return(nil)
+
+	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
 	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
@@ -119,13 +122,18 @@ func TestWebRTCServer_Run_CleanupOnContextCancel(t *testing.T) {
 	// Validate that connections are cleaned up
 	_, exists := server.GetConnection("test-session")
 	assert.False(t, exists, "Expected PeerConnection to be removed after cleanup")
+
+	mockGRPCClient.AssertCalled(t, "Close")
 }
 
 func TestWebRTCServer_Run_Shutdown(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(nil, nil))
 	sdpRequests := make(chan relayerwebrtc.SDPRequest, 1)
 
-	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", nil, sdpRequests)
+	mockGRPCClient := &mockGRPCClient{}
+	mockGRPCClient.On("Close").Return(nil)
+
+	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -144,6 +152,8 @@ func TestWebRTCServer_Run_Shutdown(t *testing.T) {
 	// Validate that the server stopped cleanly.
 	connections := server.GetAllConnections()
 	assert.Empty(t, connections, "Expected all PeerConnections to be cleaned up")
+
+	mockGRPCClient.AssertCalled(t, "Close")
 }
 
 func TestWebRTCServer_DataChannel(t *testing.T) {
@@ -241,5 +251,6 @@ func (m *mockGRPCClient) Execute(ctx context.Context, req *pb.ResolverRequest) (
 }
 
 func (m *mockGRPCClient) Close() error {
-	return nil
+	args := m.Called()
+	return args.Error(0)
 }

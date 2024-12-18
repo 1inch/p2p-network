@@ -2,6 +2,7 @@ package webrtc_test
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"os"
 	"testing"
@@ -9,7 +10,9 @@ import (
 
 	"github.com/pion/webrtc/v4"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
+	pb "github.com/1inch/p2p-network/proto"
 	relayerwebrtc "github.com/1inch/p2p-network/relayer/webrtc"
 )
 
@@ -145,19 +148,21 @@ func TestWebRTCServer_Run_Shutdown(t *testing.T) {
 
 func TestWebRTCServer_DataChannel(t *testing.T) {
 	sessionID := "test-session"
+	reqID := "test-req"
 	message := "test-message"
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	sdpRequests := make(chan relayerwebrtc.SDPRequest, 1)
 
-	// Test response received from data channel.
-	onMessage := func(sessionID, receivedMessage string) {
-		assert.Equal(t, message, receivedMessage, "Message mismatch")
-	}
+	mockGRPCClient := &mockGRPCClient{}
+	mockGRPCClient.On("Execute", mock.Anything, mock.Anything).Return(&pb.ResolverResponse{
+		Id:      "test-id",
+		Payload: []byte(message),
+		Status:  pb.ResolverResponseStatus_RESOLVER_OK,
+	}, nil)
 
-	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", nil, sdpRequests)
+	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests)
 	assert.NoError(t, err, "Failed to create WebRTC server")
-	server.OnMessage = onMessage
 
 	peerConnection1, err := webrtc.NewPeerConnection(webrtc.Configuration{})
 	assert.NoError(t, err, "Failed to create PeerConnection 1")
@@ -166,10 +171,23 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 	dataChannel, err := peerConnection1.CreateDataChannel("test-data-channel", nil)
 	assert.NoError(t, err, "Failed to create DataChannel")
 
+	req := &pb.ResolverRequest{
+		Id:      reqID,
+		Payload: []byte(message),
+	}
+	reqBytes, err := json.Marshal(req)
+	assert.NoError(t, err, "Failed to marshal ResolverRequest")
+
+	respChan := make(chan string, 1)
+
 	// Send message on open channel.
 	dataChannel.OnOpen(func() {
-		err := dataChannel.SendText(message)
+		err := dataChannel.SendText(string(reqBytes))
 		assert.NoError(t, err)
+	})
+
+	dataChannel.OnMessage(func(msg webrtc.DataChannelMessage) {
+		respChan <- string(msg.Data)
 	})
 
 	// Create and send SDP offer
@@ -199,4 +217,29 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 	assert.NotNil(t, answer, "Expected SDP answer")
 	err = peerConnection1.SetRemoteDescription(*answer)
 	assert.NoError(t, err, "Failed to set remote description")
+
+	select {
+	case response := <-respChan:
+		var resp pb.ResolverResponse
+		err := json.Unmarshal([]byte(response), &resp)
+		assert.NoError(t, err, "Failed to unmarshal response")
+		assert.Equal(t, []byte(message), resp.Payload, "Response payload does not match")
+	}
+
+	mockGRPCClient.AssertCalled(t, "Execute", mock.Anything, mock.MatchedBy(func(req *pb.ResolverRequest) bool {
+		return req.Id == reqID && string(req.Payload) == message
+	}))
+}
+
+type mockGRPCClient struct {
+	mock.Mock
+}
+
+func (m *mockGRPCClient) Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
+	args := m.Called(ctx, req)
+	return args.Get(0).(*pb.ResolverResponse), args.Error(1)
+}
+
+func (m *mockGRPCClient) Close() error {
+	return nil
 }

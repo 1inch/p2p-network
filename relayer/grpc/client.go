@@ -11,8 +11,8 @@ import (
 
 // Client wraps the gRPC connection and Execute service client.
 type Client struct {
-	Conn          *grpc.ClientConn
-	ExecuteClient pb.ExecuteClient
+	conn          *grpc.ClientConn
+	executeClient pb.ExecuteClient
 }
 
 // New initializes a new gRPC client with Execute service.
@@ -22,17 +22,17 @@ func New(address string) (*Client, error) {
 		return nil, err
 	}
 	return &Client{
-		Conn:          conn,
-		ExecuteClient: pb.NewExecuteClient(conn),
+		conn:          conn,
+		executeClient: pb.NewExecuteClient(conn),
 	}, nil
 }
 
 // Close closes the gRPC connection.
 func (c *Client) Close() error {
-	return c.Conn.Close()
+	return c.conn.Close()
 }
 
 // Execute wraps the Execute RPC call.
 func (c *Client) Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
-	return c.ExecuteClient.Execute(ctx, req)
+	return c.executeClient.Execute(ctx, req)
 }

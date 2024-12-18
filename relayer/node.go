@@ -45,7 +45,7 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 		var err error
 		grpcClient, err := grpc.New(cfg.GRPCServerAddress)
 		if err != nil {
-			logger.Error("failed to initialize gRPC client", slog.Any("err", err))
+			logger.Error("failed to initialize grpc client", slog.Any("err", err))
 			return nil, err
 		}
 		werbrtcServer, err = webrtc.New(logger.WithGroup("webrtc"), cfg.WebRTCICEServer, grpcClient, sdpRequests)

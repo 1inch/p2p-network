@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	pb "github.com/1inch/p2p-network/proto"
-	"github.com/1inch/p2p-network/relayer/grpc"
 
 	"github.com/pion/webrtc/v4"
 )
@@ -21,6 +20,12 @@ var (
 	// ErrDataChannelNotFound error represents missing data channel.
 	ErrDataChannelNotFound = errors.New("data channel not found for session")
 )
+
+// GRPCClient defines the interface for a gRPC client.
+type GRPCClient interface {
+	Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.ResolverResponse, error)
+	Close() error
+}
 
 // SDPRequest represents SDP request.
 type SDPRequest struct {
@@ -33,16 +38,16 @@ type SDPRequest struct {
 type Server struct {
 	logger       *slog.Logger
 	ICEServer    string
-	grpcClient   *grpc.Client
+	grpcClient   GRPCClient
 	sdpRequests  <-chan SDPRequest
 	connections  map[string]*webrtc.PeerConnection
 	dataChannels map[string]*webrtc.DataChannel
 	mu           sync.RWMutex
-	OnMessage    func(sessionID, message string) // Callback for incoming messages
+	// OnMessage    func(sessionID, message string) // Callback for incoming messages
 }
 
 // New initializes a new WebRTC server.
-func New(logger *slog.Logger, iceServer string, client *grpc.Client, sdpRequests <-chan SDPRequest) (*Server, error) {
+func New(logger *slog.Logger, iceServer string, client GRPCClient, sdpRequests <-chan SDPRequest) (*Server, error) {
 	if iceServer == "" {
 		return nil, ErrInvalidICEServer
 	}
@@ -79,17 +84,10 @@ func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*
 
 	// Handle DataChannel setup.
 	pc.OnDataChannel(func(dc *webrtc.DataChannel) {
-		w.logger.Info("establishing data channel", slog.String("label", dc.Label()))
-
 		w.mu.Lock()
 		w.dataChannels[sessionID] = dc
 		w.mu.Unlock()
 
-		dc.OnOpen(func() {
-			w.logger.Info("data channel opened", slog.String("label", dc.Label()))
-		})
-
-		// Handle incoming messages.
 		w.handleDataChannel(dc, sessionID)
 	})
 
@@ -175,23 +173,18 @@ func (w *Server) GetAllConnections() []string {
 
 func (w *Server) handleDataChannel(dc *webrtc.DataChannel, sessionID string) {
 	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
-		w.logger.Info("received message", slog.String("session_id", sessionID))
-
-		// Parse the incoming message into a ResolverRequest
 		var req pb.ResolverRequest
 		if err := json.Unmarshal(msg.Data, &req); err != nil {
 			w.logger.Error("failed to unmarshal message", slog.Any("err", err))
 			return
 		}
 
-		// Call gRPC Execute service
 		response, err := w.grpcClient.Execute(context.Background(), &req)
 		if err != nil {
-			w.logger.Error("gRPC execute call failed", slog.Any("err", err))
+			w.logger.Error("grpc execute call failed", slog.Any("err", err))
 			return
 		}
 
-		// Send response back to the DataChannel
 		respBytes, err := json.Marshal(response)
 		if err != nil {
 			w.logger.Error("failed to marshal response", slog.Any("err", err))
@@ -215,4 +208,9 @@ func (w *Server) cleanup() {
 	}
 	w.connections = make(map[string]*webrtc.PeerConnection)
 	w.dataChannels = make(map[string]*webrtc.DataChannel)
+
+	err := w.grpcClient.Close()
+	if err != nil {
+		w.logger.Error("failed to close grpc connection", slog.Any("err", err))
+	}
 }

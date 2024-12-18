@@ -24,6 +24,7 @@ type Relayer struct {
 
 // New initializes a new Relayer instance with provided configuration and logger.
 func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
+	sdpRequests := make(chan webrtc.SDPRequest)
 	var httpServer *httpapi.Server
 	{
 		// setup http listener.
@@ -33,14 +34,26 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 			return nil, err
 		}
 		mux := http.NewServeMux()
-		// TODO: add handlers
+		mux.HandleFunc("POST /sdp", webrtc.SDPHandler(logger, sdpRequests))
 		httpServer = httpapi.New(logger.WithGroup("httpapi"), httpListener, mux)
 	}
 
+	var werbrtcServer *webrtc.Server
+	{
+		// setup webrtc listener.
+		var err error
+		werbrtcServer, err = webrtc.New(logger.WithGroup("webrtc"), cfg.WebRTCICEServer, sdpRequests)
+		if err != nil {
+			logger.Error("failed to create webrtc server", slog.String("iceserver", cfg.WebRTCICEServer), slog.Any("err", err))
+			return nil, err
+		}
+	}
+
 	return &Relayer{
-		Config:     cfg,
-		Logger:     logger,
-		HTTPServer: httpServer,
+		Config:       cfg,
+		Logger:       logger,
+		HTTPServer:   httpServer,
+		WebRTCServer: werbrtcServer,
 	}, nil
 }
 
@@ -55,6 +68,19 @@ func (r *Relayer) Run(ctx context.Context) error {
 
 		r.Logger.Info("http server started", slog.String("addr", r.HTTPServer.Addr()))
 		err := r.HTTPServer.Run(childCtx)
+		if err != nil {
+			r.Logger.Error("http server failed to serve", slog.Any("err", err))
+			return err
+		}
+
+		return nil
+	})
+
+	group.Go(func() error {
+		defer cancel()
+
+		r.Logger.Info("webrtc server started", slog.String("iceserver", r.Config.WebRTCICEServer))
+		err := r.WebRTCServer.Run(childCtx)
 		if err != nil {
 			r.Logger.Error("http server failed to serve", slog.Any("err", err))
 			return err

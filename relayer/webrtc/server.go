@@ -88,7 +88,7 @@ func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*
 		w.dataChannels[sessionID] = dc
 		w.mu.Unlock()
 
-		w.handleDataChannel(dc, sessionID)
+		w.handleDataChannel(dc)
 	})
 
 	// Set remote SDP description (offer).
@@ -171,7 +171,7 @@ func (w *Server) GetAllConnections() []string {
 	return sessions
 }
 
-func (w *Server) handleDataChannel(dc *webrtc.DataChannel, sessionID string) {
+func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
 		var req pb.ResolverRequest
 		if err := json.Unmarshal(msg.Data, &req); err != nil {

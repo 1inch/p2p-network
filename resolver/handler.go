@@ -11,14 +11,20 @@ import (
 // ApiHandler provides Process() method for handling JSON payloads
 type ApiHandler interface {
 	Process(*types.JsonRequest) *types.JsonResponse
+	Name() string
 }
 
 type defaultApiHandler struct {
 	logger *slog.Logger
 }
 
+// Name returns API name
+func (h *defaultApiHandler) Name() string {
+	return "default"
+}
+
 // NewDefaultApiHandler creates a default API handler instance
-func NewDefaultApiHandler() ApiHandler {
+func NewDefaultApiHandler(cfg DefaultApiConfig) ApiHandler {
 	return &defaultApiHandler{logger: slog.New(slog.NewTextHandler(os.Stdout, nil)).With("module", "api")}
 }
 

@@ -9,6 +9,7 @@ import (
 
 	pb "github.com/1inch/p2p-network/proto"
 	"github.com/1inch/p2p-network/resolver/types"
+	gethrpc "github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -16,6 +17,7 @@ import (
 )
 
 const defaultBalance = 555
+const testApiName = "testApi"
 
 type ResolverTestSuite struct {
 	suite.Suite
@@ -28,24 +30,13 @@ type ResolverTestSuite struct {
 func (s *ResolverTestSuite) SetupTest() {
 	listener := bufconn.Listen(1024 * 1024)
 
-	var opts []grpc.ServerOption
-
-	grpcServer := grpc.NewServer(opts...)
-
-	server, err := newServer(&TestApiHandler{})
+	server, err := newServer([]ApiHandler{&TestApiHandler{}})
 	if err != nil {
 		slog.Error("newServer failed", "error", err)
 		return
 	}
 
-	pb.RegisterExecuteServer(grpcServer, server)
-
-	go func() {
-		if err := grpcServer.Serve(listener); err != nil {
-			s.Require().Fail("Failed to start grpc server")
-			return
-		}
-	}()
+	grpcServer := setupRpcServer(listener, server)
 	slog.Info("### Server started")
 	s.server = grpcServer
 
@@ -71,6 +62,10 @@ func TestResolverTestSuite(t *testing.T) {
 }
 
 type TestApiHandler struct{}
+
+func (h *TestApiHandler) Name() string {
+	return "testApi"
+}
 
 func (h *TestApiHandler) Process(req *types.JsonRequest) *types.JsonResponse {
 	switch req.Method {
@@ -115,11 +110,11 @@ func (s *ResolverTestSuite) TestExecute() {
 		s.Require().Fail("execute error")
 	}
 	slog.Info("test output", "resp", resp)
-	var jsonResp types.JsonResponse
+	var jsonResp types.JsonResponses
 	err = json.Unmarshal(resp.Payload, &jsonResp)
 	s.Require().NoError(err)
-	s.Require().Equal(jsonResp.Id, req.Id)
-	s.Require().Equal(int(jsonResp.Result.(float64)), defaultBalance)
+	s.Require().Equal(jsonResp[testApiName].Id, req.Id)
+	s.Require().Equal(int(jsonResp[testApiName].Result.(float64)), defaultBalance)
 }
 
 func (s *ResolverTestSuite) TestExecuteMissingMethod() {
@@ -132,11 +127,11 @@ func (s *ResolverTestSuite) TestExecuteMissingMethod() {
 		s.Require().Fail("execute error")
 	}
 	slog.Info("test output", "resp", resp)
-	var jsonResp types.JsonResponse
+	var jsonResp types.JsonResponses
 	err = json.Unmarshal(resp.Payload, &jsonResp)
 	s.Require().NoError(err)
-	s.Require().Equal(jsonResp.Id, req.Id)
-	s.Require().Equal("Unrecognized method", jsonResp.Error)
+	s.Require().Equal(jsonResp[testApiName].Id, req.Id)
+	s.Require().Equal("Unrecognized method", jsonResp[testApiName].Error)
 }
 
 func (s *ResolverTestSuite) TestExecuteMissingAddress() {
@@ -149,9 +144,22 @@ func (s *ResolverTestSuite) TestExecuteMissingAddress() {
 		s.Require().Fail("execute error")
 	}
 	slog.Info("test output", "resp", resp)
-	var jsonResp types.JsonResponse
+	var jsonResp types.JsonResponses
 	err = json.Unmarshal(resp.Payload, &jsonResp)
 	s.Require().NoError(err)
-	s.Require().Equal(jsonResp.Id, req.Id)
-	s.Require().Equal("Missing address", jsonResp.Error)
+	s.Require().Equal(jsonResp[testApiName].Id, req.Id)
+	s.Require().Equal("Missing address", jsonResp[testApiName].Error)
+}
+
+func (s *ResolverTestSuite) TestInfuraEndpoint() {
+	client, err := gethrpc.DialHTTP("https://mainnet.infura.io/v3/a8401733346d412389d762b5a63b0bcf")
+	s.Require().NoError(err)
+	s.Require().NotNil(client)
+
+	var result string
+	err = client.Call(&result, "eth_getBalance", "0x38308C349fd2F9dad31Aa3bFe28015dA3EB67193", "latest")
+	s.Require().NoError(err)
+
+	s.Require().NotEmpty(result)
+	slog.Info("Infura result", "res", result)
 }

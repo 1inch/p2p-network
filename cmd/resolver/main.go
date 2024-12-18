@@ -4,6 +4,8 @@ package main
 import (
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/1inch/p2p-network/resolver"
 	"github.com/urfave/cli"
@@ -24,14 +26,42 @@ func main() {
 						Value: 8001,
 						Usage: "gRPC server port",
 					},
+					&cli.StringSliceFlag{
+						Name:  "api",
+						Value: &cli.StringSlice{"default"},
+						Usage: "Supported APIs (default,infura)",
+					},
+					&cli.StringFlag{
+						Name:   "infuraKey",
+						Value:  "",
+						Usage:  "Infura API Key",
+						EnvVar: "INFURA_KEY",
+					},
 				},
 				Action: func(c *cli.Context) error {
 					port := c.Int("port")
-					err := resolver.Run(&resolver.Config{Port: port})
+					apis := c.StringSlice("api")
+					var apiConfigs resolver.ApiConfigs
+					for _, api := range apis {
+						switch api {
+						case "default":
+							apiConfigs.Default.Enabled = true
+						case "infura":
+							apiConfigs.Infura.Enabled = true
+							apiConfigs.Infura.Key = c.String("infuraKey")
+						}
+					}
+
+					grpcServer, err := resolver.Run(&resolver.Config{Port: port, Apis: apiConfigs})
 					if err != nil {
 						slog.Error("Error starting server", "err", err)
 						// TODO: handle error
+						return err
 					}
+					interrupted := make(chan os.Signal, 1)
+					signal.Notify(interrupted, syscall.SIGINT, syscall.SIGTERM)
+					<-interrupted
+					grpcServer.GracefulStop()
 
 					return nil
 				},

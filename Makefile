@@ -1,4 +1,4 @@
-.PHONY: resolver
+.PHONY: resolver test-resolver test-infura
 
 golang-deps:
 	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.62
@@ -12,12 +12,15 @@ protobuf:
 resolver:
 	go run ./resolver
 
-.PHONY: build_relayer
+.PHONY: build_relayer build_resolver
 build_relayer:
 	@go build -o bin/relayer ./cmd/relayer/
 
+build_resolver:
+	@go build -o bin/resolver ./cmd/resolver/
+
 .PHONY: build
-build: build_relayer
+build: build_relayer build_resolver
 
 .PHONY: clean_build
 clean_build: clean protobuf build
@@ -48,3 +51,9 @@ testsum:
 .PHONY: test_quick
 test_quick:
 	@go test -v ./...
+
+make test-resolver:
+	go test -v github.com/1inch/p2p-network/resolver ./resolver/...
+
+make test-infura:
+	go test -v github.com/1inch/p2p-network/resolver -testify.m=TestInfuraEndpoint

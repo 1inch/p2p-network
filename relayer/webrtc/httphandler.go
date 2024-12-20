@@ -45,3 +45,24 @@ func SDPHandler(logger *slog.Logger, sdpRequests chan SDPRequest) http.HandlerFu
 		}
 	}
 }
+
+// CandidateHandler handles ICECandidate request.
+func CandidateHandler(log *slog.Logger, candiadates chan ICECandidate) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			SessionID string              `json:"session_id"`
+			Candidate webrtc.ICECandidate `json:"candidate"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		candiadates <- ICECandidate{
+			SessionID: req.SessionID,
+			Candidate: req.Candidate,
+		}
+
+		w.WriteHeader(http.StatusAccepted)
+	}
+}

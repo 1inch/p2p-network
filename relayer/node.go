@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/1inch/p2p-network/relayer/grpc"
 	"github.com/1inch/p2p-network/relayer/httpapi"
 	"github.com/1inch/p2p-network/relayer/webrtc"
 	"golang.org/x/sync/errgroup"
@@ -25,6 +26,7 @@ type Relayer struct {
 // New initializes a new Relayer instance with provided configuration and logger.
 func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 	sdpRequests := make(chan webrtc.SDPRequest)
+	iceCandidates := make(chan webrtc.ICECandidate)
 	var httpServer *httpapi.Server
 	{
 		// setup http listener.
@@ -35,6 +37,7 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 		}
 		mux := http.NewServeMux()
 		mux.HandleFunc("POST /sdp", webrtc.SDPHandler(logger, sdpRequests))
+		mux.HandleFunc("POST /candidate", webrtc.CandidateHandler(logger, iceCandidates))
 		httpServer = httpapi.New(logger.WithGroup("httpapi"), httpListener, mux)
 	}
 
@@ -42,7 +45,12 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 	{
 		// setup webrtc listener.
 		var err error
-		werbrtcServer, err = webrtc.New(logger.WithGroup("webrtc"), cfg.WebRTCICEServer, sdpRequests)
+		grpcClient, err := grpc.New(cfg.GRPCServerAddress)
+		if err != nil {
+			logger.Error("failed to initialize grpc client", slog.Any("err", err))
+			return nil, err
+		}
+		werbrtcServer, err = webrtc.New(logger.WithGroup("webrtc"), cfg.WebRTCICEServer, grpcClient, sdpRequests, iceCandidates)
 		if err != nil {
 			logger.Error("failed to create webrtc server", slog.String("iceserver", cfg.WebRTCICEServer), slog.Any("err", err))
 			return nil, err

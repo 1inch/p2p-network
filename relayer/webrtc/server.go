@@ -8,10 +8,17 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	pb "github.com/1inch/p2p-network/proto"
 
 	"github.com/pion/webrtc/v4"
+)
+
+const (
+	maxRetries    = 5
+	retryDelay    = 100 * time.Millisecond
+	backoffFactor = 2
 )
 
 var (
@@ -19,6 +26,8 @@ var (
 	ErrInvalidICEServer = errors.New("invalid ICE server configuration")
 	// ErrDataChannelNotFound error represents missing data channel.
 	ErrDataChannelNotFound = errors.New("data channel not found for session")
+	// ErrConnectionNotFound error represents missing connection.
+	ErrConnectionNotFound = errors.New("connection not found for session")
 )
 
 // GRPCClient defines the interface for a gRPC client.
@@ -117,7 +126,7 @@ func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*
 		w.mu.Unlock()
 
 		dc.OnOpen(func() {
-			w.logger.Debug("data channel opened", slog.String("sessionID", sessionID))
+			w.logger.Debug("data channel opened", slog.String("sessionID", sessionID), slog.String("lable", dc.Label()))
 		})
 
 		w.handleDataChannel(dc)
@@ -168,9 +177,26 @@ func (w *Server) Run(ctx context.Context) error {
 				return nil
 			}
 
-			err := w.handleCandidate(req.SessionID, req.Candidate)
-			if err != nil {
-				w.logger.Error("failed to handle ice candidate", slog.Any("err", err))
+			for attempt := 0; attempt < maxRetries; attempt++ {
+				err := w.handleCandidate(req.SessionID, req.Candidate)
+				if err == nil {
+					break
+				}
+
+				if !errors.Is(err, ErrConnectionNotFound) {
+					// Non-retryable errors
+					w.logger.Error("failed to handle ICE candidate", slog.String("session_id", req.SessionID), slog.Any("err", err))
+					break
+				}
+
+				w.logger.Warn("connection not found, retrying", slog.String("session_id", req.SessionID), slog.Int("attempt", attempt+1))
+
+				select {
+				case <-ctx.Done():
+					w.logger.Warn("context cancelled during retry", slog.String("session_id", req.SessionID))
+					return fmt.Errorf("context cancelled: %w", err)
+				case <-time.After(retryWithBackoff(attempt)):
+				}
 			}
 
 			return nil
@@ -243,17 +269,26 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 }
 
 func (w *Server) handleCandidate(sessionID string, candidate webrtc.ICECandidate) error {
-	fmt.Println("[Server] new ice candidate from peer", sessionID, candidate.String())
 	w.logger.Debug("handled ice candidate", slog.String("sessionID", sessionID), slog.String("candidate", candidate.String()))
 
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	err := w.connections[sessionID].AddICECandidate(candidate.ToJSON())
+	w.mu.RLock()
+	conn, ok := w.connections[sessionID]
+	w.mu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("%w: session_id=%s", ErrConnectionNotFound, sessionID)
+	}
+
+	err := conn.AddICECandidate(candidate.ToJSON())
 	if err != nil {
-		return fmt.Errorf("failed to add ice candidate: %w", err)
+		return fmt.Errorf("failed to add ICE candidate: %w", err)
 	}
 
 	return nil
+}
+
+func retryWithBackoff(attempt int) time.Duration {
+	return retryDelay * time.Duration(backoffFactor^attempt)
 }
 
 func (w *Server) cleanup() {

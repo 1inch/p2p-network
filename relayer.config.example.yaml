@@ -1,3 +1,4 @@
 log_level: DEBUG
 http_endpoint: 127.0.0.1:8080
 webrtc_ice_server: stun:stun1.l.google.com:19302
+grpc_server_address: 127.0.0.1:0

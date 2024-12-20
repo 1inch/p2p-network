@@ -34,6 +34,7 @@ type SDPRequest struct {
 	Response  chan *webrtc.SessionDescription
 }
 
+// ICECandidate represents ICECandidate request.
 type ICECandidate struct {
 	SessionID string
 	Candidate webrtc.ICECandidate
@@ -60,6 +61,7 @@ func New(
 	sdpRequests <-chan SDPRequest,
 	iceICECandidates <-chan ICECandidate,
 ) (*Server, error) {
+
 	if iceServer == "" {
 		return nil, ErrInvalidICEServer
 	}

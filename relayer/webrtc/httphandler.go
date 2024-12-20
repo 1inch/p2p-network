@@ -46,6 +46,7 @@ func SDPHandler(logger *slog.Logger, sdpRequests chan SDPRequest) http.HandlerFu
 	}
 }
 
+// CandidateHandler handles ICECandidate request.
 func CandidateHandler(log *slog.Logger, candiadates chan ICECandidate) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {

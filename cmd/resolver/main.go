@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/1inch/p2p-network/internal/configs"
 	"github.com/1inch/p2p-network/resolver"
 	"github.com/urfave/cli"
 )
@@ -37,9 +38,28 @@ func main() {
 						Usage:  "Infura API Key",
 						EnvVar: "INFURA_KEY",
 					},
+					&cli.StringFlag{
+						Name:  "configFile",
+						Usage: "Path to the configuration file",
+					},
 				},
 				Action: func(c *cli.Context) error {
+					cfg := &resolver.Config{}
+					// Try to load config file, if present
+					configPath := c.String("configFile")
+					if configPath != "" {
+						cfgFromFile, err := configs.LoadConfig[resolver.Config](configPath)
+						if err != nil {
+							slog.Error("Error opening config file", "err", err)
+						}
+						cfg = cfgFromFile
+					}
+					// Override config file value for port
 					port := c.Int("port")
+					if port != 0 {
+						cfg.Port = port
+					}
+					// Override config file value for apis
 					apis := c.StringSlice("api")
 					var apiConfigs resolver.ApiConfigs
 					for _, api := range apis {
@@ -51,8 +71,9 @@ func main() {
 							apiConfigs.Infura.Key = c.String("infuraKey")
 						}
 					}
+					cfg.Apis = apiConfigs
 
-					grpcServer, err := resolver.Run(&resolver.Config{Port: port, Apis: apiConfigs})
+					grpcServer, err := resolver.Run(cfg)
 					if err != nil {
 						slog.Error("Error starting server", "err", err)
 						// TODO: handle error

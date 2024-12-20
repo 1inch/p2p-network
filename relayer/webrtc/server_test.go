@@ -19,8 +19,12 @@ import (
 func TestWebRTCServer_HandleSDP(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(nil, nil))
 	sdpRequests := make(chan relayerwebrtc.SDPRequest, 1)
+	iceCandidates := make(chan relayerwebrtc.ICECandidate)
 
-	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", nil, sdpRequests)
+	mockGRPCClient := &mockGRPCClient{}
+	mockGRPCClient.On("Close").Return(nil)
+
+	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
 	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{
@@ -71,11 +75,12 @@ func TestWebRTCServer_HandleSDP(t *testing.T) {
 func TestWebRTCServer_Run_CleanupOnContextCancel(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(nil, nil))
 	sdpRequests := make(chan relayerwebrtc.SDPRequest, 1)
+	iceCandidates := make(chan relayerwebrtc.ICECandidate)
 
 	mockGRPCClient := &mockGRPCClient{}
 	mockGRPCClient.On("Close").Return(nil)
 
-	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests)
+	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
 	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
@@ -129,11 +134,12 @@ func TestWebRTCServer_Run_CleanupOnContextCancel(t *testing.T) {
 func TestWebRTCServer_Run_Shutdown(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(nil, nil))
 	sdpRequests := make(chan relayerwebrtc.SDPRequest, 1)
+	iceCandidates := make(chan relayerwebrtc.ICECandidate)
 
 	mockGRPCClient := &mockGRPCClient{}
 	mockGRPCClient.On("Close").Return(nil)
 
-	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests)
+	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -163,6 +169,7 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	sdpRequests := make(chan relayerwebrtc.SDPRequest, 1)
+	iceCandidates := make(chan relayerwebrtc.ICECandidate)
 
 	mockGRPCClient := &mockGRPCClient{}
 	mockGRPCClient.On("Execute", mock.Anything, mock.Anything).Return(&pb.ResolverResponse{
@@ -171,15 +178,24 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 		Status:  pb.ResolverResponseStatus_RESOLVER_OK,
 	}, nil)
 
-	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests)
+	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
-	peerConnection1, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
 	assert.NoError(t, err, "Failed to create PeerConnection 1")
 
 	// Set up a DataChannel
-	dataChannel, err := peerConnection1.CreateDataChannel("test-data-channel", nil)
+	dataChannel, err := peerConnection.CreateDataChannel("test-data-channel", nil)
 	assert.NoError(t, err, "Failed to create DataChannel")
+
+	peerConnection.OnICECandidate(func(candidate *webrtc.ICECandidate) {
+		if candidate != nil {
+			iceCandidates <- relayerwebrtc.ICECandidate{
+				SessionID: sessionID,
+				Candidate: *candidate,
+			}
+		}
+	})
 
 	req := &pb.ResolverRequest{
 		Id:      reqID,
@@ -201,15 +217,16 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 	})
 
 	// Create and send SDP offer
-	offer, err := peerConnection1.CreateOffer(nil)
+	offer, err := peerConnection.CreateOffer(nil)
 	assert.NoError(t, err, "Failed to create SDP offer")
-	err = peerConnection1.SetLocalDescription(offer)
+	err = peerConnection.SetLocalDescription(offer)
 	assert.NoError(t, err, "Failed to set local description")
 
 	responseChan := make(chan *webrtc.SessionDescription)
+
 	sdpRequests <- relayerwebrtc.SDPRequest{
 		SessionID: sessionID,
-		Offer:     *peerConnection1.LocalDescription(),
+		Offer:     *peerConnection.LocalDescription(),
 		Response:  responseChan,
 	}
 
@@ -225,7 +242,7 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 	// Wait for SDP answer.
 	answer := <-responseChan
 	assert.NotNil(t, answer, "Expected SDP answer")
-	err = peerConnection1.SetRemoteDescription(*answer)
+	err = peerConnection.SetRemoteDescription(*answer)
 	assert.NoError(t, err, "Failed to set remote description")
 
 	select {

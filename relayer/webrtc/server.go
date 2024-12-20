@@ -34,31 +34,44 @@ type SDPRequest struct {
 	Response  chan *webrtc.SessionDescription
 }
 
+type ICECandidate struct {
+	SessionID string
+	Candidate webrtc.ICECandidate
+}
+
 // Server wraps the webrtc.Server.
 type Server struct {
-	logger       *slog.Logger
-	ICEServer    string
-	grpcClient   GRPCClient
-	sdpRequests  <-chan SDPRequest
-	connections  map[string]*webrtc.PeerConnection
-	dataChannels map[string]*webrtc.DataChannel
-	mu           sync.RWMutex
+	logger        *slog.Logger
+	ICEServer     string
+	grpcClient    GRPCClient
+	sdpRequests   <-chan SDPRequest
+	iceCandidates <-chan ICECandidate
+	connections   map[string]*webrtc.PeerConnection
+	dataChannels  map[string]*webrtc.DataChannel
+	mu            sync.RWMutex
 	// OnMessage    func(sessionID, message string) // Callback for incoming messages
 }
 
 // New initializes a new WebRTC server.
-func New(logger *slog.Logger, iceServer string, client GRPCClient, sdpRequests <-chan SDPRequest) (*Server, error) {
+func New(
+	logger *slog.Logger,
+	iceServer string,
+	client GRPCClient,
+	sdpRequests <-chan SDPRequest,
+	iceICECandidates <-chan ICECandidate,
+) (*Server, error) {
 	if iceServer == "" {
 		return nil, ErrInvalidICEServer
 	}
 
 	return &Server{
-		sdpRequests:  sdpRequests,
-		ICEServer:    iceServer,
-		grpcClient:   client,
-		connections:  make(map[string]*webrtc.PeerConnection),
-		dataChannels: make(map[string]*webrtc.DataChannel),
-		logger:       logger,
+		sdpRequests:   sdpRequests,
+		iceCandidates: iceICECandidates,
+		ICEServer:     iceServer,
+		grpcClient:    client,
+		connections:   make(map[string]*webrtc.PeerConnection),
+		dataChannels:  make(map[string]*webrtc.DataChannel),
+		logger:        logger,
 	}, nil
 }
 
@@ -82,11 +95,28 @@ func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*
 		}
 	})
 
+	pc.OnICEConnectionStateChange(func(is webrtc.ICEConnectionState) {
+		w.logger.Debug("ice connection state change", slog.String("sessionID", sessionID), slog.String("state", is.String()))
+	})
+
+	pc.OnICECandidate(func(candidate *webrtc.ICECandidate) {
+		if candidate == nil {
+			w.logger.Debug("ice candidate gathering complete", slog.String("sessionID", sessionID))
+			return
+		}
+
+		w.logger.Debug("ice candidate found", slog.String("sessionID", sessionID), slog.String("candidate", candidate.String()))
+	})
+
 	// Handle DataChannel setup.
 	pc.OnDataChannel(func(dc *webrtc.DataChannel) {
 		w.mu.Lock()
 		w.dataChannels[sessionID] = dc
 		w.mu.Unlock()
+
+		dc.OnOpen(func() {
+			w.logger.Debug("data channel opened", slog.String("sessionID", sessionID))
+		})
 
 		w.handleDataChannel(dc)
 	})
@@ -126,11 +156,22 @@ func (w *Server) Run(ctx context.Context) error {
 			}
 			answer, err := w.HandleSDP(req.SessionID, req.Offer)
 			if err != nil {
-				w.logger.Error("Failed to process SDP offer", slog.Any("err", err))
+				w.logger.Error("failed to process sdp offer", slog.Any("err", err))
 				req.Response <- nil
 			} else {
 				req.Response <- answer
 			}
+		case req, ok := <-w.iceCandidates:
+			if !ok {
+				return nil
+			}
+
+			err := w.handleCandidate(req.SessionID, req.Candidate)
+			if err != nil {
+				w.logger.Error("failed to handle ice candidate", slog.Any("err", err))
+			}
+
+			return nil
 		}
 	}
 }
@@ -173,6 +214,8 @@ func (w *Server) GetAllConnections() []string {
 
 func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
+		w.logger.Debug("message received", slog.String("label", dc.Label()), slog.Any("msg", msg))
+
 		var req pb.ResolverRequest
 		if err := json.Unmarshal(msg.Data, &req); err != nil {
 			w.logger.Error("failed to unmarshal message", slog.Any("err", err))
@@ -195,6 +238,20 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 			w.logger.Error("failed to send response", slog.Any("err", err))
 		}
 	})
+}
+
+func (w *Server) handleCandidate(sessionID string, candidate webrtc.ICECandidate) error {
+	fmt.Println("[Server] new ice candidate from peer", sessionID, candidate.String())
+	w.logger.Debug("handled ice candidate", slog.String("sessionID", sessionID), slog.String("candidate", candidate.String()))
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	err := w.connections[sessionID].AddICECandidate(candidate.ToJSON())
+	if err != nil {
+		return fmt.Errorf("failed to add ice candidate: %w", err)
+	}
+
+	return nil
 }
 
 func (w *Server) cleanup() {

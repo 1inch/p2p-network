@@ -57,3 +57,6 @@ make test-resolver:
 
 make test-infura:
 	go test -v github.com/1inch/p2p-network/resolver -testify.m=TestInfuraEndpoint
+
+make test-integration:
+	go test -v github.com/1inch/p2p-network/test 

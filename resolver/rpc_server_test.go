@@ -2,12 +2,14 @@ package resolver
 
 import (
 	"context"
+	"crypto"
 	"encoding/json"
 	"log/slog"
 	"net"
 	"os"
 	"testing"
 
+	"github.com/1inch/p2p-network/internal/encryption"
 	pb "github.com/1inch/p2p-network/proto"
 	"github.com/1inch/p2p-network/resolver/types"
 	gethrpc "github.com/ethereum/go-ethereum/rpc"
@@ -26,20 +28,26 @@ type ResolverTestSuite struct {
 
 	logger *slog.Logger
 	server *grpc.Server
-	client pb.ExecuteClient
-	conn   *grpc.ClientConn
+
+	resolverPrivateKey crypto.PrivateKey
+	client             pb.ExecuteClient
+	conn               *grpc.ClientConn
 }
 
 func (s *ResolverTestSuite) SetupTest() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	s.logger = logger
 	listener := bufconn.Listen(1024 * 1024)
+	cfg := &Config{}
+	cfg.Apis.Default.Enabled = true
 
-	server, err := newServer(logger, &TestApiHandler{})
+	server, err := newServer(cfg)
 	if err != nil {
 		logger.Error("newServer failed", "error", err)
 		return
 	}
+
+	s.resolverPrivateKey = server.privateKey
 
 	grpcServer := setupRpcServer(listener, server)
 	logger.Info("### Server started")
@@ -66,25 +74,6 @@ func TestResolverTestSuite(t *testing.T) {
 	suite.Run(t, new(ResolverTestSuite))
 }
 
-type TestApiHandler struct{}
-
-func (h *TestApiHandler) Name() string {
-	return "testApi"
-}
-
-func (h *TestApiHandler) Process(req *types.JsonRequest) (*types.JsonResponse, error) {
-	switch req.Method {
-	case "GetWalletBalance":
-		{
-			if len(req.Params) < 2 {
-				return &types.JsonResponse{Id: req.Id, Result: 0}, errWrongParamCount
-			}
-			return &types.JsonResponse{Id: req.Id, Result: defaultBalance}, nil
-		}
-	default:
-		return &types.JsonResponse{Id: req.Id, Result: 0}, errUnrecognizedMethod
-	}
-}
 func (s *ResolverTestSuite) getWalletBalancePayloadOk() []byte {
 	jsonReq := &types.JsonRequest{Id: "1", Method: "GetWalletBalance", Params: []string{"0x0ADfCCa4B2a1132F82488546AcA086D7E24EA324", "latest"}}
 	byteArr, _ := json.Marshal(jsonReq)
@@ -128,6 +117,39 @@ type negativeTestCase struct {
 	ResolverRequest *pb.ResolverRequest
 	ExpectedCode    codes.Code
 	ExpectedError   error
+}
+
+func (s *ResolverTestSuite) TestExecuteEncrypted() {
+	relayerKey, err := encryption.GenerateKeyPair(encryption.Secp256k1)
+	s.Require().NoError(err)
+	relayerPEM, err := encryption.ToPEM(relayerKey)
+	s.Require().NoError(err)
+
+	resolverPEM, err := encryption.ToPEM(s.resolverPrivateKey)
+	s.Require().NoError(err)
+	s.Require().NotNil(resolverPEM)
+
+	encryptedPayload, err := encryption.Encrypt(s.getWalletBalancePayloadOk(), resolverPEM)
+	s.Require().NoError(err)
+
+	req := &pb.ResolverRequest{Id: "1", Payload: encryptedPayload, Encrypted: true, PublicKey: relayerPEM}
+
+	slog.Info("###about to execute")
+	resp, err := s.client.Execute(context.Background(), req)
+	if err != nil {
+		slog.Info("Execute error", "error", err)
+		s.Require().Fail("execute error")
+	}
+	slog.Info("test output", "resp", resp)
+
+	decryptedPayload, err := encryption.Decrypt(resp.Payload, relayerKey)
+	s.Require().NoError(err)
+
+	var jsonResp types.JsonResponse
+	err = json.Unmarshal(decryptedPayload, &jsonResp)
+	s.Require().NoError(err)
+	s.Require().Equal(jsonResp.Id, req.Id)
+	s.Require().Equal(jsonResp.Result.(float64), defaultBalance)
 }
 
 // i use this approach because negative tests looks like copy-paste with change in the expected data

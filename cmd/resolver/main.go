@@ -27,10 +27,10 @@ func main() {
 						Value: 8001,
 						Usage: "gRPC server port",
 					},
-					&cli.StringSliceFlag{
+					&cli.StringFlag{
 						Name:  "api",
-						Value: &cli.StringSlice{"default"},
-						Usage: "Supported APIs (default,infura)",
+						Value: "default",
+						Usage: "Supported API (default,infura)",
 					},
 					&cli.StringFlag{
 						Name:   "infuraKey",
@@ -60,9 +60,9 @@ func main() {
 						cfg.Port = port
 					}
 					// Override config file value for apis
-					apis := c.StringSlice("api")
-					var apiConfigs resolver.ApiConfigs
-					for _, api := range apis {
+					api := c.String("api")
+					if len(api) > 0 {
+						var apiConfigs resolver.ApiConfigs
 						switch api {
 						case "default":
 							apiConfigs.Default.Enabled = true
@@ -70,9 +70,8 @@ func main() {
 							apiConfigs.Infura.Enabled = true
 							apiConfigs.Infura.Key = c.String("infuraKey")
 						}
+						cfg.Apis = apiConfigs
 					}
-					cfg.Apis = apiConfigs
-
 					grpcServer, err := resolver.Run(cfg)
 					if err != nil {
 						slog.Error("Error starting server", "err", err)

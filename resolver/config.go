@@ -24,6 +24,9 @@ type Config struct {
 	// gRPC server port
 	Port int `yaml:"port"`
 
+	// Default resolver node key
+	PrivateKey string `yaml:"private_key"`
+
 	// Can be one or more of the following: default,infura
 	Apis ApiConfigs `yaml:"apis"`
 

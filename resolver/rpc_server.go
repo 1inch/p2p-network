@@ -3,12 +3,15 @@ package resolver
 
 import (
 	"context"
+	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"os"
 
+	"github.com/1inch/p2p-network/internal/encryption"
 	pb "github.com/1inch/p2p-network/proto"
 	"github.com/1inch/p2p-network/resolver/types"
 	"google.golang.org/grpc/codes"
@@ -29,7 +32,7 @@ var (
 type Server struct {
 	pb.UnimplementedExecuteServer
 
-	privateKey *rsa.PrivateKey
+	privateKey crypto.PrivateKey
 
 	logger *slog.Logger
 
@@ -46,10 +49,37 @@ func generateKey() (*rsa.PrivateKey, error) {
 }
 
 // newServer creates new RpcServer.
-func newServer(logger *slog.Logger, handler ApiHandler) (*Server, error) {
-	privKey, err := generateKey()
-	if err != nil {
-		return nil, err
+func newServer(cfg *Config) (*Server, error) {
+	loggerHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: cfg.LogLevel,
+	})
+	logger := slog.New(loggerHandler)
+	var handler ApiHandler
+
+	switch {
+	case cfg.Apis.Default.Enabled:
+		{
+			handler = NewDefaultApiHandler(cfg.Apis.Default, logger)
+		}
+	case cfg.Apis.Infura.Enabled:
+		{
+			handler = NewInfuraApiHandler(cfg.Apis.Infura, logger)
+		}
+	default:
+		logger.Error("expect someone handler api in config")
+		return nil, errNoHandlerApiInConfig
+	}
+
+	var privKey crypto.PrivateKey
+	if len(cfg.PrivateKey) > 0 {
+		privKey = cfg.PrivateKey
+	} else {
+		privKeyGenerated, err := encryption.GenerateKeyPair(encryption.Secp256k1)
+
+		if err != nil {
+			return nil, err
+		}
+		privKey = privKeyGenerated
 	}
 	return &Server{privateKey: privKey, logger: logger.With("module", "server"), handler: handler}, nil
 }
@@ -78,6 +108,12 @@ func (s *Server) Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.Reso
 		return nil, s.formatGrpcError(response, err)
 	}
 
+	if req.Encrypted {
+		resp, err = encryption.Encrypt(resp, req.PublicKey)
+		if err != nil {
+			return nil, s.formatGrpcError(response, err)
+		}
+	}
 	response.Payload = resp
 
 	return response, nil
@@ -102,7 +138,17 @@ func (s *Server) validateResolverRequest(req *pb.ResolverRequest) error {
 
 func (s *Server) getJsonRequest(req *pb.ResolverRequest) (*types.JsonRequest, error) {
 	var jsonReq types.JsonRequest
-	err := json.Unmarshal(req.Payload, &jsonReq)
+	var payload []byte
+	if req.Encrypted {
+		decrypted, err := encryption.Decrypt(req.Payload, s.privateKey)
+		if err != nil {
+			return nil, err
+		}
+		payload = decrypted
+	} else {
+		payload = req.Payload
+	}
+	err := json.Unmarshal(payload, &jsonReq)
 	if err != nil {
 		s.logger.Error("error when try unmarshal request payload")
 		return nil, err

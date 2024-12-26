@@ -20,7 +20,7 @@ func (s *ConfigTestSuite) TestYamlConfigParsing() {
 	s.Require().NoError(err)
 
 	s.Require().Equal(cfg.Port, 8001)
-	s.Require().Equal(cfg.Apis.Default.Enabled, true)
+	s.Require().Equal(cfg.Apis.Default.Enabled, false)
 	s.Require().Equal(cfg.Apis.Infura.Enabled, true)
 	s.Require().Equal(cfg.Apis.Infura.Key, "test-key")
 }

@@ -111,7 +111,7 @@ func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase) {
 	dataChannel, err := peerConnection.CreateDataChannel("test-data-channel", nil)
 	assert.NoError(t, err, "Failed to create DataChannel")
 
-	//change this to call relayer "candidate" endpoint when fix session
+	// change this to call relayer "candidate" endpoint when fix session
 	peerConnection.OnICECandidate(func(candidate *webrtc.ICECandidate) {
 		if candidate != nil {
 			iceCandidates <- relayerwebrtc.ICECandidate{
@@ -150,7 +150,7 @@ func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase) {
 
 	responseChan := make(chan *webrtc.SessionDescription)
 
-	//change this to call relayer "sdp" endpoint when fix session
+	// change this to call relayer "sdp" endpoint when fix session
 	sdpRequests <- relayerwebrtc.SDPRequest{
 		SessionID: testCase.SessionId,
 		Offer:     *peerConnection.LocalDescription(),
@@ -174,7 +174,7 @@ func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase) {
 
 	response := <-respChan
 	var resp pb.ResolverResponse
-	err = json.Unmarshal([]byte(response), &resp)
+	err = json.Unmarshal(response, &resp)
 	assert.NoError(t, err, "Failed to unmarshal response")
 	assert.Equal(t, testCase.ExpectedResolverResponseStatus, resp.Status, "Response status not equal")
 

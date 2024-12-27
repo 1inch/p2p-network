@@ -1,0 +1,14 @@
+services:
+  relayer:
+    build:
+      context: .
+      target: relayer
+    ports:
+      - "8080:8080"
+
+  resolver:
+    build:
+      context: .
+      target: resolver
+    ports:
+      - "8001:8001"

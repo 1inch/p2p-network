@@ -70,7 +70,7 @@ func TestRelayerAndResolverIntegration(t *testing.T) {
 			ExpectedResolverResponseStatus: pb.ResolverResponseStatus_RESOLVER_OK,
 			ExpectedJsonResponseError:      "",
 			FuncCheckActualJsonResponseResult: func(result interface{}) {
-				assert.Greater(t, 0, result)
+				assert.NotEmpty(t, result)
 			},
 			ConfigForResolver: cfgResolverWithInfuraApi(),
 		},
@@ -84,7 +84,7 @@ func TestRelayerAndResolverIntegration(t *testing.T) {
 			ExpectedResolverApiName:           "default",
 			ExpectedResolverResponseStatus:    pb.ResolverResponseStatus_RESOLVER_ERROR, // this status code is correct in this case ?
 			ExpectedJsonResponseError:         "Unrecognized method",
-			FuncCheckActualJsonResponseResult: func(result interface{}) { assert.Equal(t, 0, result) },
+			FuncCheckActualJsonResponseResult: func(result interface{}) { assert.Equal(t, float64(0), result) },
 			ConfigForResolver:                 cfgResolverWithDefaultApi(),
 		},
 	}

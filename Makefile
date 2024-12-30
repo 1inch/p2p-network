@@ -5,6 +5,7 @@ golang-deps:
 	@go install github.com/fernandrone/linelint@0.0.6
 	@go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+	@go install github.com/ethereum/go-ethereum/cmd/abigen@latest
 
 protobuf:
 	protoc -I=./proto --go_out=./proto --go-grpc_out=./proto proto/*.proto

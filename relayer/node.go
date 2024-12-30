@@ -85,12 +85,10 @@ func (r *Relayer) Run(ctx context.Context) error {
 	})
 
 	group.Go(func() error {
-		defer cancel()
-
 		r.Logger.Info("webrtc server started", slog.String("iceserver", r.Config.WebRTCICEServer))
 		err := r.WebRTCServer.Run(childCtx)
 		if err != nil {
-			r.Logger.Error("http server failed to serve", slog.Any("err", err))
+			r.Logger.Error("webrtc server failed to serve", slog.Any("err", err))
 			return err
 		}
 

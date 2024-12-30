@@ -17,7 +17,7 @@ import (
 
 const (
 	maxRetries    = 5
-	retryDelay    = 100 * time.Millisecond
+	retryDelay    = 200 * time.Millisecond
 	backoffFactor = 2
 )
 
@@ -88,6 +88,8 @@ func New(
 
 // HandleSDP processes an SDP offer, sets up a PeerConnection, and generates an SDP answer.
 func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*webrtc.SessionDescription, error) {
+	w.logger.Debug("handle sdp", slog.String("sesionID", sessionID))
+
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{{URLs: []string{w.ICEServer}}},
 	})
@@ -198,8 +200,6 @@ func (w *Server) Run(ctx context.Context) error {
 				case <-time.After(retryWithBackoff(attempt)):
 				}
 			}
-
-			return nil
 		}
 	}
 }

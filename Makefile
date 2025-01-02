@@ -80,3 +80,6 @@ start_anvil:
 	else \
 		echo "Anvil is already running"; \
 	fi
+
+test-integration:
+	go test -v github.com/1inch/p2p-network/test 

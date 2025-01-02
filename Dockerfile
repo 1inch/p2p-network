@@ -1,6 +1,6 @@
 FROM golang:1.23-alpine as builder
 
-RUN apk add --no-cache make g++
+RUN apk add --no-cache make
 
 WORKDIR /app
 

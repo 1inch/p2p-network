@@ -4,6 +4,7 @@ go 1.23.4
 
 require (
 	github.com/ethereum/go-ethereum v1.14.12
+	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/pion/webrtc/v4 v4.0.6
 	github.com/stretchr/testify v1.10.0
 	google.golang.org/grpc v1.68.1

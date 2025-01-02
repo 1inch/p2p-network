@@ -12,13 +12,3 @@ services:
       target: resolver
     ports:
       - "8001:8001"
-
-  ethereum:
-    image: trufflesuite/ganache
-    container_name: local-ethereum
-    ports:
-      - "8545:8545"
-    command:
-      -p 8545 -h 0.0.0.0 --deterministic
-    volumes:
-      - ./data:/data

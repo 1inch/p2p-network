@@ -1,5 +1,5 @@
 // Package contracts contains Solidity contracts and generated Go bindings
 package contracts
 
-//go:generate sh -c "docker run --rm -v $(pwd):/sources ethereum/solc:stable -o /sources/output --abi --bin /sources/NodeRegistry.sol --overwrite --optimize"
-//go:generate sh -c "abigen --bin=./output/NodeRegistry.bin --abi=./output/NodeRegistry.abi --pkg=contracts --type NodeRegistry --out=node_registry.go"
+//go:generate sh -c "solc --bin --abi -o ./bin/ NodeRegistry.sol --overwrite --optimize"
+//go:generate sh -c "abigen --bin=./bin/NodeRegistry.bin --abi=./bin/NodeRegistry.abi --pkg=contracts --type NodeRegistry --out=node_registry.go"

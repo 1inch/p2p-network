@@ -4,3 +4,5 @@ bin
 .DS_Store
 
 config.yaml
+
+contracts/bin

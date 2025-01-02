@@ -17,7 +17,7 @@ import (
 
 const (
 	maxRetries    = 5
-	retryDelay    = 100 * time.Millisecond
+	retryDelay    = 200 * time.Millisecond
 	backoffFactor = 2
 )
 
@@ -198,8 +198,6 @@ func (w *Server) Run(ctx context.Context) error {
 				case <-time.After(retryWithBackoff(attempt)):
 				}
 			}
-
-			return nil
 		}
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	// "github.com/1inch/p2p-network/relayer"
 
@@ -101,6 +102,7 @@ func TestRelayerAndResolverIntegration(t *testing.T) {
 }
 
 func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase) {
+	time.Sleep(time.Duration(1000)) // add this sleep because sometimes http server does not have time to stop before start new test
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -122,6 +124,12 @@ func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase) {
 		if candidate != nil {
 			logger.Info("start send candidate", slog.Any("address", candidate.Address))
 			resp, err := sendCandidateRequestToRelayer(testCase.SessionId, candidate, logger)
+			defer func() {
+				err := resp.Body.Close()
+				if err != nil {
+					logger.Error("error when try close response body")
+				}
+			}()
 			if err != nil {
 				logger.Error("error when try send candidate request to relayer", slog.Any("err", err.Error()))
 			}
@@ -164,6 +172,12 @@ func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase) {
 
 	logger.Info("start send sdp")
 	httpSdpResp, err := sendSDPRequestToRelayer(testCase.SessionId, peerConnection.LocalDescription(), logger)
+	defer func() {
+		err := httpSdpResp.Body.Close()
+		if err != nil {
+			logger.Error("error when try close response body")
+		}
+	}()
 	assert.NoError(t, err, "Failed to send sdp request to relayer")
 	assert.Equal(t, http.StatusOK, httpSdpResp.StatusCode, "Expected status ok from sdp endpoint")
 
@@ -206,7 +220,12 @@ func sendCandidateRequestToRelayer(sessionId string, candidate *webrtc.ICECandid
 		return nil, err
 	}
 
-	return http.Post(fmt.Sprintf(formatForUrl, httpEndpointToRelayer, "candidate"), "application/json", bytes.NewReader(reqBytes))
+	httpReq, err := http.NewRequestWithContext(context.Background(), http.MethodPost, fmt.Sprintf(formatForUrl, httpEndpointToRelayer, "candidate"), bytes.NewReader(reqBytes))
+	if err != nil {
+		logger.Error("error when create http request to candidate")
+		return nil, err
+	}
+	return http.DefaultClient.Do(httpReq)
 }
 
 func sendSDPRequestToRelayer(sessionId string, sessionDescription *webrtc.SessionDescription, logger *slog.Logger) (*http.Response, error) {
@@ -224,7 +243,12 @@ func sendSDPRequestToRelayer(sessionId string, sessionDescription *webrtc.Sessio
 		return nil, err
 	}
 
-	return http.Post(fmt.Sprintf(formatForUrl, httpEndpointToRelayer, "sdp"), "application/json", bytes.NewReader(reqBytes))
+	httpReq, err := http.NewRequestWithContext(context.Background(), http.MethodPost, fmt.Sprintf(formatForUrl, httpEndpointToRelayer, "sdp"), bytes.NewReader(reqBytes))
+	if err != nil {
+		logger.Error("error when create http request to candidate")
+		return nil, err
+	}
+	return http.DefaultClient.Do(httpReq)
 }
 
 func setupRelayer(ctx context.Context, logger *slog.Logger) (*relayer.Relayer, error) {
@@ -239,7 +263,12 @@ func setupRelayer(ctx context.Context, logger *slog.Logger) (*relayer.Relayer, e
 		return nil, err
 	}
 
-	go relayerNode.Run(ctx)
+	go func() {
+		err := relayerNode.Run(ctx)
+		if err != nil {
+			logger.Error("error when try start relayer node")
+		}
+	}()
 
 	return relayerNode, nil
 }

@@ -9,8 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync"
 	"testing"
-	"time"
 
 	// "github.com/1inch/p2p-network/relayer"
 
@@ -44,6 +44,7 @@ type TestCase struct {
 
 func TestRelayerAndResolverIntegration(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	wg := &sync.WaitGroup{}
 
 	// maybe need use some pseudo-random algorithm for generate session_id, requestId,
 	testCases := []TestCase{
@@ -96,23 +97,30 @@ func TestRelayerAndResolverIntegration(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.Name, func(t *testing.T) {
-			testWorkFlow(t, logger, &testCase)
+			testWorkFlow(t, logger, &testCase, wg)
 		})
 	}
 }
 
-func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase) {
-	time.Sleep(time.Duration(1000)) // add this sleep because sometimes http server does not have time to stop before start new test
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase, wg *sync.WaitGroup) {
+	wg.Wait() // wait when previous test case is done
 
+	logger.Info("start test case", slog.Any("name", testCase.Name))
+	wg.Add(1) // add test case in wait group
+
+	ctx, cancel := context.WithCancel(context.Background())
 	_, err := setupRelayer(ctx, logger)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
 	resolverGrpcServer, err := setupResolver(testCase.ConfigForResolver)
 	assert.NoError(t, err, "Failed to create resolver grpc server")
-	defer resolverGrpcServer.GracefulStop()
+	defer func() { // its block stopped servers and test-case
+		cancel()
+		resolverGrpcServer.GracefulStop()
+		wg.Done()
+	}()
 
+	// Create new peer connection
 	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
 	assert.NoError(t, err, "Failed to create PeerConnection 1")
 
@@ -120,6 +128,7 @@ func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase) {
 	dataChannel, err := peerConnection.CreateDataChannel("test-data-channel", nil)
 	assert.NoError(t, err, "Failed to create DataChannel")
 
+	// Add handler for IceCandidate, in the handler need send this candidate to relayer by http endpoint
 	peerConnection.OnICECandidate(func(candidate *webrtc.ICECandidate) {
 		if candidate != nil {
 			logger.Info("start send candidate", slog.Any("address", candidate.Address))
@@ -170,6 +179,7 @@ func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase) {
 		Answer webrtc.SessionDescription `json:"answer"`
 	}{}
 
+	// start send sdp request to relayer
 	logger.Info("start send sdp")
 	httpSdpResp, err := sendSDPRequestToRelayer(testCase.SessionId, peerConnection.LocalDescription(), logger)
 	defer func() {
@@ -190,6 +200,7 @@ func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase) {
 	err = peerConnection.SetRemoteDescription(sdpResponse.Answer)
 	assert.NoError(t, err, "Failed to set remote description")
 
+	// get response from data channel and check the response
 	response := <-respChan
 	var resp pb.ResolverResponse
 	err = json.Unmarshal(response, &resp)
@@ -206,6 +217,7 @@ func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase) {
 	assert.Equal(t, testCase.ExpectedJsonResponseError, jsonResp.Error)
 }
 
+// sendCandidateRequestToRelayer method for send request candidate to relayer using http endpoint
 func sendCandidateRequestToRelayer(sessionId string, candidate *webrtc.ICECandidate, logger *slog.Logger) (*http.Response, error) {
 	req := struct {
 		SessionID string              `json:"session_id"`
@@ -228,6 +240,7 @@ func sendCandidateRequestToRelayer(sessionId string, candidate *webrtc.ICECandid
 	return http.DefaultClient.Do(httpReq)
 }
 
+// sendSDPRequestToRelayer method for send request sdp to relayer using http endpoint
 func sendSDPRequestToRelayer(sessionId string, sessionDescription *webrtc.SessionDescription, logger *slog.Logger) (*http.Response, error) {
 	req := struct {
 		SessionID string                    `json:"session_id"`

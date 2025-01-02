@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"sync"
 	"testing"
 
 	// "github.com/1inch/p2p-network/relayer"
@@ -44,7 +43,8 @@ type TestCase struct {
 
 func TestRelayerAndResolverIntegration(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	wg := &sync.WaitGroup{}
+	testCaseBlocker := make(chan bool, 1) // this channel using for block starting next test case before end previous test-case
+	testCaseBlocker <- true
 
 	// maybe need use some pseudo-random algorithm for generate session_id, requestId,
 	testCases := []TestCase{
@@ -97,16 +97,14 @@ func TestRelayerAndResolverIntegration(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.Name, func(t *testing.T) {
-			testWorkFlow(t, logger, &testCase, wg)
+			testWorkFlow(t, logger, &testCase, testCaseBlocker)
 		})
 	}
 }
 
-func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase, wg *sync.WaitGroup) {
-	wg.Wait() // wait when previous test case is done
-
+func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase, testCaseBlocker chan bool) {
 	logger.Info("start test case", slog.Any("name", testCase.Name))
-	wg.Add(1) // add test case in wait group
+	<-testCaseBlocker // wait end previous test
 
 	ctx, cancel := context.WithCancel(context.Background())
 	_, err := setupRelayer(ctx, logger)
@@ -117,7 +115,7 @@ func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase, wg *syn
 	defer func() { // its block stopped servers and test-case
 		cancel()
 		resolverGrpcServer.GracefulStop()
-		wg.Done()
+		testCaseBlocker <- true // inform that test case is end
 	}()
 
 	// Create new peer connection

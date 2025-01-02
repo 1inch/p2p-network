@@ -1,17 +1,20 @@
 package test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"testing"
 
 	// "github.com/1inch/p2p-network/relayer"
 
 	pb "github.com/1inch/p2p-network/proto"
-	relayergrpc "github.com/1inch/p2p-network/relayer/grpc"
-	relayerwebrtc "github.com/1inch/p2p-network/relayer/webrtc"
+	"github.com/1inch/p2p-network/relayer"
 	"github.com/1inch/p2p-network/resolver"
 	"github.com/1inch/p2p-network/resolver/types"
 	"github.com/pion/webrtc/v4"
@@ -21,6 +24,7 @@ import (
 )
 
 const (
+	formatForUrl           = "http://%s/%s"
 	httpEndpointToRelayer  = "127.0.0.1:8080"
 	grpcEndpointToResolver = "127.0.0.1:8001"
 	ICEServer              = "stun:stun1.l.google.com:19302"
@@ -97,7 +101,10 @@ func TestRelayerAndResolverIntegration(t *testing.T) {
 }
 
 func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase) {
-	sdpRequests, iceCandidates, relayerServer, err := setupRelayer(logger)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	_, err := setupRelayer(ctx, logger)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
 	resolverGrpcServer, err := setupResolver(testCase.ConfigForResolver)
@@ -111,12 +118,15 @@ func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase) {
 	dataChannel, err := peerConnection.CreateDataChannel("test-data-channel", nil)
 	assert.NoError(t, err, "Failed to create DataChannel")
 
-	// change this to call relayer "candidate" endpoint when fix session
 	peerConnection.OnICECandidate(func(candidate *webrtc.ICECandidate) {
 		if candidate != nil {
-			iceCandidates <- relayerwebrtc.ICECandidate{
-				SessionID: testCase.SessionId,
-				Candidate: *candidate,
+			logger.Info("start send candidate", slog.Any("address", candidate.Address))
+			resp, err := sendCandidateRequestToRelayer(testCase.SessionId, candidate, logger)
+			if err != nil {
+				logger.Error("error when try send candidate request to relayer", slog.Any("err", err.Error()))
+			}
+			if resp.StatusCode != http.StatusAccepted {
+				logger.Error("status code from candidate response not equal \"200 OK\"")
 			}
 		}
 	})
@@ -148,28 +158,22 @@ func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase) {
 	err = peerConnection.SetLocalDescription(offer)
 	assert.NoError(t, err, "Failed to set local description")
 
-	responseChan := make(chan *webrtc.SessionDescription)
+	sdpResponse := struct {
+		Answer webrtc.SessionDescription `json:"answer"`
+	}{}
 
-	// change this to call relayer "sdp" endpoint when fix session
-	sdpRequests <- relayerwebrtc.SDPRequest{
-		SessionID: testCase.SessionId,
-		Offer:     *peerConnection.LocalDescription(),
-		Response:  responseChan,
-	}
+	logger.Info("start send sdp")
+	httpSdpResp, err := sendSDPRequestToRelayer(testCase.SessionId, peerConnection.LocalDescription(), logger)
+	assert.NoError(t, err, "Failed to send sdp request to relayer")
+	assert.Equal(t, http.StatusOK, httpSdpResp.StatusCode, "Expected status ok from sdp endpoint")
 
-	// Start relayer server.
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	body, err := io.ReadAll(httpSdpResp.Body)
+	assert.NoError(t, err, "Failed read body from response")
+	err = json.Unmarshal(body, &sdpResponse)
+	assert.NoError(t, err, "Failed unmarshal body from response")
+	assert.NotNil(t, sdpResponse, "Expected SDP response")
 
-	go func() {
-		err := relayerServer.Run(ctx)
-		assert.NoError(t, err, "WebRTC server exited with error")
-	}()
-
-	// Wait for SDP answer.
-	answer := <-responseChan
-	assert.NotNil(t, answer, "Expected SDP answer")
-	err = peerConnection.SetRemoteDescription(*answer)
+	err = peerConnection.SetRemoteDescription(sdpResponse.Answer)
 	assert.NoError(t, err, "Failed to set remote description")
 
 	response := <-respChan
@@ -188,20 +192,56 @@ func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase) {
 	assert.Equal(t, testCase.ExpectedJsonResponseError, jsonResp.Error)
 }
 
-func setupRelayer(logger *slog.Logger) (chan relayerwebrtc.SDPRequest, chan relayerwebrtc.ICECandidate, *relayerwebrtc.Server, error) {
-	sdpRequests := make(chan relayerwebrtc.SDPRequest, 1)
-	iceCandidates := make(chan relayerwebrtc.ICECandidate)
-	grpcClient, err := relayergrpc.New(grpcEndpointToResolver)
+func sendCandidateRequestToRelayer(sessionId string, candidate *webrtc.ICECandidate, logger *slog.Logger) (*http.Response, error) {
+	req := struct {
+		SessionID string              `json:"session_id"`
+		Candidate webrtc.ICECandidate `json:"candidate"`
+	}{
+		SessionID: sessionId,
+		Candidate: *candidate,
+	}
+	reqBytes, err := json.Marshal(req)
 	if err != nil {
-		return nil, nil, nil, err
+		logger.Error("error when try marshal ice candidate", slog.Any("err", err.Error()))
+		return nil, err
 	}
 
-	server, err := relayerwebrtc.New(logger, ICEServer, grpcClient, sdpRequests, iceCandidates)
-	if err != nil {
-		return nil, nil, nil, err
+	return http.Post(fmt.Sprintf(formatForUrl, httpEndpointToRelayer, "candidate"), "application/json", bytes.NewReader(reqBytes))
+}
+
+func sendSDPRequestToRelayer(sessionId string, sessionDescription *webrtc.SessionDescription, logger *slog.Logger) (*http.Response, error) {
+	req := struct {
+		SessionID string                    `json:"session_id"`
+		Offer     webrtc.SessionDescription `json:"offer"`
+	}{
+		SessionID: sessionId,
+		Offer:     *sessionDescription,
 	}
 
-	return sdpRequests, iceCandidates, server, nil
+	reqBytes, err := json.Marshal(req)
+	if err != nil {
+		logger.Error("error when try marshal session description", slog.Any("err", err.Error()))
+		return nil, err
+	}
+
+	return http.Post(fmt.Sprintf(formatForUrl, httpEndpointToRelayer, "sdp"), "application/json", bytes.NewReader(reqBytes))
+}
+
+func setupRelayer(ctx context.Context, logger *slog.Logger) (*relayer.Relayer, error) {
+	cfg := &relayer.Config{
+		LogLevel:          "INFO",
+		HTTPEndpoint:      httpEndpointToRelayer,
+		WebRTCICEServer:   ICEServer,
+		GRPCServerAddress: grpcEndpointToResolver,
+	}
+	relayerNode, err := relayer.New(cfg, logger.WithGroup("Relayer"))
+	if err != nil {
+		return nil, err
+	}
+
+	go relayerNode.Run(ctx)
+
+	return relayerNode, nil
 }
 
 func setupResolver(cfg *resolver.Config) (*grpc.Server, error) {

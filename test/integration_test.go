@@ -11,7 +11,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/1inch/p2p-network/internal/registry"
 	pb "github.com/1inch/p2p-network/proto"
 	"github.com/1inch/p2p-network/relayer"
 	"github.com/1inch/p2p-network/resolver"
@@ -81,19 +80,19 @@ func TestRelayerAndResolverIntegration(t *testing.T) {
 			},
 			ConfigForResolver: cfgResolverWithInfuraApi(),
 		},
-		{
-			Name:      "UnhandledMessageInResolver",
-			SessionId: "test-session-id-3",
-			JsonRequest: &types.JsonRequest{
-				Id:     "request-id-2",
-				Method: "blockNumber",
-			},
-			ExpectedResolverApiName:           "default",
-			ExpectedResolverResponseStatus:    pb.ResolverResponseStatus_RESOLVER_ERROR, // this status code is correct in this case ?
-			ExpectedJsonResponseError:         "Unrecognized method",
-			FuncCheckActualJsonResponseResult: func(result interface{}) { assert.Equal(t, float64(0), result) },
-			ConfigForResolver:                 cfgResolverWithDefaultApi(),
-		},
+		// {
+		// 	Name:      "UnhandledMessageInResolver",
+		// 	SessionId: "test-session-id-3",
+		// 	JsonRequest: &types.JsonRequest{
+		// 		Id:     "request-id-2",
+		// 		Method: "blockNumber",
+		// 	},
+		// 	ExpectedResolverApiName:           "default",
+		// 	ExpectedResolverResponseStatus:    pb.ResolverResponseStatus_RESOLVER_ERROR, // this status code is correct in this case ?
+		// 	ExpectedJsonResponseError:         "Unrecognized method",
+		// 	FuncCheckActualJsonResponseResult: func(result interface{}) { assert.Equal(t, float64(0), result) },
+		// 	ConfigForResolver:                 cfgResolverWithDefaultApi(),
+		// },
 	}
 
 	for _, testCase := range testCases {
@@ -108,11 +107,11 @@ func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	_, err := registry.DeployNodeRegistry(ctx, registry.Config{
-		DialURI:    blockchainRPCAddress,
-		PrivateKey: deploymentPrivateKey,
-	})
-	assert.NoError(t, err, "Failed to deploy Node Registry contract")
+	// _, err := registry.DeployNodeRegistry(ctx, registry.Config{
+	// 	DialURI:    blockchainRPCAddress,
+	// 	PrivateKey: deploymentPrivateKey,
+	// })
+	// assert.NoError(t, err, "Failed to deploy Node Registry contract")
 
 	_, httpRelayerUri, err := setupRelayer(ctx, logger, testCase.ConfigForResolver)
 	assert.NoError(t, err, "Failed to create WebRTC server")

@@ -53,6 +53,10 @@ jobs:
 
       - name: Start Anvil
         run: |
+          foundryup
+
+      - name: Start Anvil
+        run: |
           make start-anvil
 
       - name: Install gotestsum

@@ -51,9 +51,11 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1.3.1
 
-      - name: Start Anvil
-        run: |
-          foundryup
+      - name: Add Foundry to PATH
+        run: echo "$HOME/.foundry/bin" >> $GITHUB_PATH
+
+      - name: Verify Anvil Installation
+        run: anvil --version
 
       - name: Start Anvil
         run: |

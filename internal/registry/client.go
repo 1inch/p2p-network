@@ -23,8 +23,9 @@ var (
 
 // Config represents registry client config.
 type Config struct {
-	DialURI    string
-	PrivateKey string
+	DialURI         string
+	PrivateKey      string
+	ContractAddress string
 }
 
 // Client represents storage client.
@@ -36,13 +37,13 @@ type Client struct {
 }
 
 // Dial creates eth client, new smart-contract instance, auth.
-func Dial(ctx context.Context, url, key, contractAddress string) (*Client, error) {
-	client, err := ethclient.Dial(url)
+func Dial(ctx context.Context, config Config) (*Client, error) {
+	client, err := ethclient.Dial(config.DialURI)
 	if err != nil {
 		return &Client{}, err
 	}
 
-	privateKey, err := crypto.HexToECDSA(key)
+	privateKey, err := crypto.HexToECDSA(config.PrivateKey)
 	if err != nil {
 		return &Client{}, err
 	}
@@ -52,7 +53,7 @@ func Dial(ctx context.Context, url, key, contractAddress string) (*Client, error
 		return &Client{}, err
 	}
 
-	registry, err := contracts.NewNodeRegistry(common.HexToAddress(contractAddress), client)
+	registry, err := contracts.NewNodeRegistry(common.HexToAddress(config.ContractAddress), client)
 	if err != nil {
 		return &Client{}, err
 	}

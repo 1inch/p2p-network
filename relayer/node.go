@@ -41,7 +41,11 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 		mux.HandleFunc("POST /sdp", webrtc.SDPHandler(logger, sdpRequests))
 		mux.HandleFunc("POST /candidate", webrtc.CandidateHandler(logger, iceCandidates))
 		mux.HandleFunc("GET /relayer", func(w http.ResponseWriter, r *http.Request) {
-			client, err := registry.Dial(r.Context(), cfg.BlockchainRPCAddress, cfg.PrivateKey, cfg.ContractAddress)
+			client, err := registry.Dial(r.Context(), registry.Config{
+				DialURI:         cfg.BlockchainRPCAddress,
+				PrivateKey:      cfg.PrivateKey,
+				ContractAddress: cfg.ContractAddress,
+			})
 			if err != nil {
 				http.Error(w, "failed to connect to Ethereum node", http.StatusInternalServerError)
 				return
@@ -143,7 +147,11 @@ func (r *Relayer) Run(ctx context.Context) error {
 }
 
 func (r *Relayer) registerRelayer(ctx context.Context) error {
-	client, err := registry.Dial(ctx, r.Config.BlockchainRPCAddress, r.Config.PrivateKey, r.Config.ContractAddress)
+	client, err := registry.Dial(ctx, registry.Config{
+		DialURI:         r.Config.BlockchainRPCAddress,
+		PrivateKey:      r.Config.PrivateKey,
+		ContractAddress: r.Config.ContractAddress,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to connect to Ethereum node: %w", err)
 	}

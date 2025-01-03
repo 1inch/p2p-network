@@ -9,7 +9,6 @@ type Config struct {
 	BlockchainRPCAddress string `yaml:"blockchain_rpc_address"`
 	ContractAddress      string `yaml:"contract_address"`
 	PrivateKey           string `yaml:"private_key"`
-	ChainID              int64  `yaml:"chain_id"`
 }
 
 // DefaultConfig returns default configuration for the relayer node.
@@ -22,6 +21,5 @@ func DefaultConfig() Config {
 		BlockchainRPCAddress: "127.0.0.1:8545",
 		ContractAddress:      "0x5fbdb2315678afecb367f032d93f642f64180aa3",
 		PrivateKey:           "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
-		ChainID:              31337,
 	}
 }

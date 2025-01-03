@@ -52,15 +52,16 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 			}
 			defer client.Close()
 
-			ip, err := client.Registry.GetRelayer(&bind.CallOpts{})
+			relayer, err := client.Registry.GetRelayer(&bind.CallOpts{})
 			if err != nil {
 				http.Error(w, "failed to get closest relayer node", http.StatusInternalServerError)
 				return
 			}
 
 			resp := struct {
-				IPAddress string `json:"ip_address"`
-			}{IPAddress: ip}
+				IPAddress string   `json:"ip_address"`
+				Resolvers [][]byte `json:"resolvers"`
+			}{IPAddress: relayer.Ip, Resolvers: relayer.PublicKeys}
 
 			w.Header().Set("Content-Type", "application/json")
 			err = json.NewEncoder(w).Encode(resp)

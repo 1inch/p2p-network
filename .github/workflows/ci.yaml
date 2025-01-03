@@ -53,7 +53,7 @@ jobs:
 
       - name: Start Anvil
         run: |
-          make start_anvil PORT=8545
+          make start-anvil
 
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@v1.12.0

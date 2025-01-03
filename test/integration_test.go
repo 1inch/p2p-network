@@ -17,6 +17,8 @@ import (
 	"github.com/pion/webrtc/v4"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	// "google.golang.org/grpc"
 )
 
@@ -26,22 +28,19 @@ const (
 	ICEServer              = "stun:stun1.l.google.com:19302"
 )
 
-type TestCase struct {
+type positiveTestCase struct {
 	Name                              string
 	SessionId                         string
 	JsonRequest                       *types.JsonRequest
-	ExpectedResolverApiName           string
-	ExpectedResolverResponseStatus    pb.ResolverResponseStatus
-	ExpectedJsonResponseError         string
 	FuncCheckActualJsonResponseResult func(result interface{})
 	ConfigForResolver                 *resolver.Config
 }
 
-func TestRelayerAndResolverIntegration(t *testing.T) {
+func TestPositiveCases(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	// maybe need use some pseudo-random algorithm for generate session_id, requestId,
-	testCases := []TestCase{
+	testCases := []positiveTestCase{
 		{
 			Name:      "ResolverUsedDefaultHandler",
 			SessionId: "test-session-id-1",
@@ -50,9 +49,6 @@ func TestRelayerAndResolverIntegration(t *testing.T) {
 				Method: "GetWalletBalance",
 				Params: []string{"0x0ADfCCa4B2a1132F82488546AcA086D7E24EA324", "latest"},
 			},
-			ExpectedResolverApiName:        "default",
-			ExpectedResolverResponseStatus: pb.ResolverResponseStatus_RESOLVER_OK,
-			ExpectedJsonResponseError:      "",
 			FuncCheckActualJsonResponseResult: func(result interface{}) {
 				assert.Equal(t, 555., result)
 			},
@@ -66,41 +62,54 @@ func TestRelayerAndResolverIntegration(t *testing.T) {
 				Method: "GetWalletBalance",
 				Params: []string{"0x0ADfCCa4B2a1132F82488546AcA086D7E24EA324", "latest"},
 			},
-			ExpectedResolverApiName:        "infura",
-			ExpectedResolverResponseStatus: pb.ResolverResponseStatus_RESOLVER_OK,
-			ExpectedJsonResponseError:      "",
 			FuncCheckActualJsonResponseResult: func(result interface{}) {
 				assert.NotEmpty(t, result)
 			},
 			ConfigForResolver: cfgResolverWithInfuraApi(),
 		},
-		{
-			Name:      "UnhandledMessageInResolver",
-			SessionId: "test-session-id-3",
-			JsonRequest: &types.JsonRequest{
-				Id:     "request-id-2",
-				Method: "blockNumber",
-			},
-			ExpectedResolverApiName:           "default",
-			ExpectedResolverResponseStatus:    pb.ResolverResponseStatus_RESOLVER_ERROR, // this status code is correct in this case ?
-			ExpectedJsonResponseError:         "Unrecognized method",
-			FuncCheckActualJsonResponseResult: func(result interface{}) { assert.Equal(t, float64(0), result) },
-			ConfigForResolver:                 cfgResolverWithDefaultApi(),
-		},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.Name, func(t *testing.T) {
-			testWorkFlow(t, logger, &testCase)
+			positiveTestWorkFlow(t, logger, &testCase)
 		})
 	}
 }
 
-func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase) {
+func TestUnhandledMessageInResolver(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	expectedCode := codes.InvalidArgument
+	expecteErrorMessage := "unrecognized method"
+	jsonReq := &types.JsonRequest{
+		Id:     "request-id-2",
+		Method: "blockNumber",
+	}
+	respBytes := testWorkFlowAndReturnResponseChan(t, logger, cfgResolverWithDefaultApi(),
+		"test-session-id-3",
+		jsonReq,
+	)
+
+	var errorDetails error
+	err := json.Unmarshal(respBytes, &errorDetails)
+	assert.NoError(t, err, "Failed to unmarshal response")
+
+	statusError := status.Convert(errorDetails)
+	responseResolver, ok := statusError.Details()[0].(*pb.ResolverResponse)
+
+	assert.True(t, ok, "expect that first elem in status error detais is responseResolver")
+
+	assert.Equal(t, jsonReq.Id, responseResolver.Id)
+	assert.Equal(t, expectedCode, statusError.Code())
+	assert.Equal(t, expecteErrorMessage, statusError.Message())
+}
+
+func testWorkFlowAndReturnResponseChan(t *testing.T, logger *slog.Logger, cfg *resolver.Config,
+	sessionId string, jsonReq *types.JsonRequest) []byte {
+
 	sdpRequests, iceCandidates, relayerServer, err := setupRelayer(logger)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
-	resolverGrpcServer, err := setupResolver(testCase.ConfigForResolver)
+	resolverGrpcServer, err := setupResolver(cfg)
 	assert.NoError(t, err, "Failed to create resolver grpc server")
 	defer resolverGrpcServer.GracefulStop()
 
@@ -115,17 +124,17 @@ func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase) {
 	peerConnection.OnICECandidate(func(candidate *webrtc.ICECandidate) {
 		if candidate != nil {
 			iceCandidates <- relayerwebrtc.ICECandidate{
-				SessionID: testCase.SessionId,
+				SessionID: sessionId,
 				Candidate: *candidate,
 			}
 		}
 	})
 
-	payload, err := json.Marshal(testCase.JsonRequest)
+	payload, err := json.Marshal(jsonReq)
 	assert.NoError(t, err, "Failed to marshal JsonRequest")
 
 	req := &pb.ResolverRequest{
-		Id:      testCase.JsonRequest.Id,
+		Id:      jsonReq.Id,
 		Payload: payload,
 	}
 	reqBytes, err := json.Marshal(req)
@@ -152,7 +161,7 @@ func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase) {
 
 	// change this to call relayer "sdp" endpoint when fix session
 	sdpRequests <- relayerwebrtc.SDPRequest{
-		SessionID: testCase.SessionId,
+		SessionID: sessionId,
 		Offer:     *peerConnection.LocalDescription(),
 		Response:  responseChan,
 	}
@@ -172,20 +181,20 @@ func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase) {
 	err = peerConnection.SetRemoteDescription(*answer)
 	assert.NoError(t, err, "Failed to set remote description")
 
-	response := <-respChan
+	return <-respChan
+}
+
+func positiveTestWorkFlow(t *testing.T, logger *slog.Logger, testCase *positiveTestCase) {
+	respBytes := testWorkFlowAndReturnResponseChan(t, logger, testCase.ConfigForResolver, testCase.SessionId, testCase.JsonRequest)
 	var resp pb.ResolverResponse
-	err = json.Unmarshal(response, &resp)
-	assert.NoError(t, err, "Failed to unmarshal response")
-	assert.Equal(t, testCase.ExpectedResolverResponseStatus, resp.Status, "Response status not equal")
-
-	var jsonResps types.JsonResponses
-	err = json.Unmarshal(resp.Payload, &jsonResps)
+	err := json.Unmarshal(respBytes, &resp)
 	assert.NoError(t, err, "Failed to unmarshal response")
 
-	jsonResp, ok := jsonResps[testCase.ExpectedResolverApiName]
-	assert.Truef(t, ok, "Resolver not return response for api name: %s", testCase.ExpectedResolverApiName)
+	var jsonResp types.JsonResponse
+	err = json.Unmarshal(resp.Payload, &jsonResp)
+	assert.NoError(t, err, "Failed to unmarshal response")
+
 	testCase.FuncCheckActualJsonResponseResult(jsonResp.Result)
-	assert.Equal(t, testCase.ExpectedJsonResponseError, jsonResp.Error)
 }
 
 func setupRelayer(logger *slog.Logger) (chan relayerwebrtc.SDPRequest, chan relayerwebrtc.ICECandidate, *relayerwebrtc.Server, error) {

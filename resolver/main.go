@@ -2,15 +2,19 @@
 package resolver
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
 	"net"
+	"os"
 
 	pb "github.com/1inch/p2p-network/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
+
+var errNoHandlerApiInConfig = errors.New("no handler api in config")
 
 func setupRpcServer(listener net.Listener, server *Server, opts ...grpc.ServerOption) *grpc.Server {
 	grpcServer := grpc.NewServer(opts...)
@@ -34,6 +38,10 @@ func setupRpcServer(listener net.Listener, server *Server, opts ...grpc.ServerOp
 
 // Run starts gRPC server with provided config
 func Run(cfg *Config) (*grpc.Server, error) {
+	loggerHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: cfg.LogLevel,
+	})
+	logger := slog.New(loggerHandler)
 	// Create TCP listener
 	lis, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", cfg.Port))
 	if err != nil {
@@ -42,16 +50,26 @@ func Run(cfg *Config) (*grpc.Server, error) {
 	}
 	log.Printf("Listening on %d\n", cfg.Port)
 
-	// Create server instance
-	handlers := make([]ApiHandler, 0)
-	if cfg.Apis.Default.Enabled {
-		handlers = append(handlers, NewDefaultApiHandler(cfg.Apis.Default))
-	}
-	if cfg.Apis.Infura.Enabled {
-		handlers = append(handlers, NewInfuraApiHandler(cfg.Apis.Infura))
+	var handler ApiHandler
+
+	switch {
+	case cfg.Apis.Default.Enabled:
+		{
+			handler = NewDefaultApiHandler(cfg.Apis.Default, logger)
+		}
+	case cfg.Apis.Infura.Enabled:
+		{
+			handler = NewInfuraApiHandler(cfg.Apis.Infura, logger)
+		}
+	default:
+		logger.Error("expect someone handler api in config")
+		return nil, errNoHandlerApiInConfig
 	}
 
-	server, err := newServer(handlers)
+	if err != nil {
+		return nil, err
+	}
+	server, err := newServer(logger, handler)
 	if err != nil {
 		slog.Error("newServer failed", "error", err)
 		return nil, err

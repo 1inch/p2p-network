@@ -21,6 +21,19 @@
    ```bash
    make start_anvil
    ```
+      ```
+
+   To stop:
+
+   ```bash
+   make stop-anvil
+   ```
+
+   Alternatively, you can start Anvil in Docker:
+
+   ```bash
+   docker run -p 8545:8545 --platform linux/amd64 ghcr.io/foundry-rs/foundry:latest "anvil --host 0.0.0.0"
+   ```
 
    **Default Anvil Settings:**
 

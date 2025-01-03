@@ -5,6 +5,7 @@ golang-deps:
 	@go install github.com/fernandrone/linelint@0.0.6
 	@go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+	@go install github.com/ethereum/go-ethereum/cmd/abigen@latest
 
 protobuf:
 	protoc -I=./proto --go_out=./proto --go-grpc_out=./proto proto/*.proto
@@ -22,6 +23,10 @@ build_resolver:
 .PHONY: build
 build: build_relayer build_resolver
 
+.PHONY: generate_bindings
+generate_bindings:
+	@go generate -x ./contracts
+
 .PHONY: clean_build
 clean_build: clean protobuf build
 
@@ -29,6 +34,7 @@ clean_build: clean protobuf build
 clean: # for local usage
 	@rm -rf bin/*
 	@rm -rf proto/*.pb.go
+	@rm -rf contracts/bin/*
 
 .PHONY: check_lint
 check_lint: # for local usage
@@ -48,15 +54,32 @@ test:
 testsum:
 	@gotestsum --format testname -- -race -count=1 ./...
 
+.PHONY: deploy_contract
+deploy_contract:
+	@echo "Deploying contract..."
+	@go test -v -tags=deploy ./...
+
 .PHONY: test_quick
 test_quick:
 	@go test -v ./...
 
-make test-resolver:
+test-resolver:
 	go test -v github.com/1inch/p2p-network/resolver ./resolver/...
 
-make test-infura:
+test-infura:
 	go test -v github.com/1inch/p2p-network/resolver -testify.m=TestInfuraEndpoint
 
-make test-integration:
+.PHONY: start_anvil
+start_anvil:
+	@if ! command -v anvil &> /dev/null; then \
+		echo "Anvil binary not found"; \
+	elif ! pgrep -x "anvil" > /dev/null; then \
+		echo "Starting anvil on port 8545"; \
+		anvil & \
+		timeout 5 sh -c 'until nc -z localhost $(PORT); do sleep 1; done' || (echo "Anvil failed to start." && exit 1); \
+	else \
+		echo "Anvil is already running"; \
+	fi
+
+test-integration:
 	go test -v github.com/1inch/p2p-network/test 

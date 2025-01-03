@@ -33,7 +33,13 @@ var (
 // GRPCClient defines the interface for a gRPC client.
 type GRPCClient interface {
 	Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.ResolverResponse, error)
+	ExecuteRequest(ctx context.Context, address string, req *pb.ResolverRequest) (*pb.ResolverResponse, error)
 	Close() error
+}
+
+// RegistryClient defines the interface for a node registry client.
+type RegistryClient interface {
+	GetResolver(publicKey []byte) (string, error)
 }
 
 // SDPRequest represents SDP request.
@@ -51,15 +57,15 @@ type ICECandidate struct {
 
 // Server wraps the webrtc.Server.
 type Server struct {
-	logger        *slog.Logger
-	ICEServer     string
-	grpcClient    GRPCClient
-	sdpRequests   <-chan SDPRequest
-	iceCandidates <-chan ICECandidate
-	connections   map[string]*webrtc.PeerConnection
-	dataChannels  map[string]*webrtc.DataChannel
-	mu            sync.RWMutex
-	// OnMessage    func(sessionID, message string) // Callback for incoming messages
+	logger         *slog.Logger
+	ICEServer      string
+	grpcClient     GRPCClient
+	registryClient RegistryClient
+	sdpRequests    <-chan SDPRequest
+	iceCandidates  <-chan ICECandidate
+	connections    map[string]*webrtc.PeerConnection
+	dataChannels   map[string]*webrtc.DataChannel
+	mu             sync.RWMutex
 }
 
 // New initializes a new WebRTC server.
@@ -67,6 +73,7 @@ func New(
 	logger *slog.Logger,
 	iceServer string,
 	client GRPCClient,
+	registryClient RegistryClient,
 	sdpRequests <-chan SDPRequest,
 	iceICECandidates <-chan ICECandidate,
 ) (*Server, error) {
@@ -76,13 +83,14 @@ func New(
 	}
 
 	return &Server{
-		sdpRequests:   sdpRequests,
-		iceCandidates: iceICECandidates,
-		ICEServer:     iceServer,
-		grpcClient:    client,
-		connections:   make(map[string]*webrtc.PeerConnection),
-		dataChannels:  make(map[string]*webrtc.DataChannel),
-		logger:        logger,
+		sdpRequests:    sdpRequests,
+		iceCandidates:  iceICECandidates,
+		ICEServer:      iceServer,
+		grpcClient:     client,
+		registryClient: registryClient,
+		connections:    make(map[string]*webrtc.PeerConnection),
+		dataChannels:   make(map[string]*webrtc.DataChannel),
+		logger:         logger,
 	}, nil
 }
 
@@ -250,20 +258,28 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 			return
 		}
 
-		response, err := w.grpcClient.Execute(context.Background(), &req)
-		if err != nil {
-			w.logger.Error("grpc execute call failed", slog.Any("err", err))
-			return
-		}
+		for _, publicKey := range req.PublicKeys {
+			address, err := w.registryClient.GetResolver(publicKey)
+			if err != nil {
+				w.logger.Error("failed to get resolver ip address", slog.Any("err", err))
+				return
+			}
 
-		respBytes, err := json.Marshal(response)
-		if err != nil {
-			w.logger.Error("failed to marshal response", slog.Any("err", err))
-			return
-		}
+			response, err := w.grpcClient.ExecuteRequest(context.Background(), address, &req)
+			if err != nil {
+				w.logger.Error("grpc execute call failed", slog.Any("err", err))
+				return
+			}
 
-		if err := dc.SendText(string(respBytes)); err != nil {
-			w.logger.Error("failed to send response", slog.Any("err", err))
+			respBytes, err := json.Marshal(response)
+			if err != nil {
+				w.logger.Error("failed to marshal response", slog.Any("err", err))
+				return
+			}
+
+			if err := dc.SendText(string(respBytes)); err != nil {
+				w.logger.Error("failed to send response", slog.Any("err", err))
+			}
 		}
 	})
 }
@@ -302,9 +318,4 @@ func (w *Server) cleanup() {
 	}
 	w.connections = make(map[string]*webrtc.PeerConnection)
 	w.dataChannels = make(map[string]*webrtc.DataChannel)
-
-	err := w.grpcClient.Close()
-	if err != nil {
-		w.logger.Error("failed to close grpc connection", slog.Any("err", err))
-	}
 }

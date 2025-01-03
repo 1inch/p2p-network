@@ -36,3 +36,14 @@ func (c *Client) Close() error {
 func (c *Client) Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
 	return c.executeClient.Execute(ctx, req)
 }
+
+// ExecuteRequest wraps the Execute RPC call.
+func (c *Client) ExecuteRequest(ctx context.Context, address string, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
+	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	return pb.NewExecuteClient(conn).Execute(ctx, req)
+}

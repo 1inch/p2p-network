@@ -13,7 +13,6 @@ import (
 	"github.com/1inch/p2p-network/relayer/grpc"
 	"github.com/1inch/p2p-network/relayer/httpapi"
 	"github.com/1inch/p2p-network/relayer/webrtc"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -48,7 +47,7 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 			}
 			defer client.Close()
 
-			ip, err := client.Registry.GetRelayer(&bind.CallOpts{})
+			ip, err := client.GetRelayer()
 			if err != nil {
 				http.Error(w, "failed to get closest relayer node", http.StatusInternalServerError)
 				return
@@ -72,12 +71,18 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 	{
 		// setup webrtc listener.
 		var err error
+		ctx := context.Background()
 		grpcClient, err := grpc.New(cfg.GRPCServerAddress)
 		if err != nil {
 			logger.Error("failed to initialize grpc client", slog.Any("err", err))
 			return nil, err
 		}
-		werbrtcServer, err = webrtc.New(logger.WithGroup("webrtc"), cfg.WebRTCICEServer, grpcClient, sdpRequests, iceCandidates)
+		registryClient, err := contracts.Dial(ctx, cfg.BlockchainRPCAddress, cfg.PrivateKey, cfg.ContractAddress)
+		if err != nil {
+			logger.Error("failed to initialize registry client", slog.Any("err", err))
+			return nil, err
+		}
+		werbrtcServer, err = webrtc.New(logger.WithGroup("webrtc"), cfg.WebRTCICEServer, grpcClient, registryClient, sdpRequests, iceCandidates)
 		if err != nil {
 			logger.Error("failed to create webrtc server", slog.String("iceserver", cfg.WebRTCICEServer), slog.Any("err", err))
 			return nil, err
@@ -149,16 +154,9 @@ func (r *Relayer) registerRelayer(ctx context.Context) error {
 	}
 	defer client.Close()
 
-	tx, err := client.Registry.RegisterRelayer(client.Auth, r.Config.HTTPEndpoint)
-	if err != nil {
+	if err = client.RegisterRelayer(ctx, r.Config.HTTPEndpoint); err != nil {
 		return fmt.Errorf("failed to register relayer: %w", err)
 	}
-
-	if err := client.WaitForTx(ctx, tx.Hash()); err != nil {
-		return fmt.Errorf("wait for transaction error: %w", err)
-	}
-
-	r.Logger.Debug("successfully sent register relayer tx", slog.String("tx_hash", tx.Hash().String()))
 
 	return nil
 }

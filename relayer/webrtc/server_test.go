@@ -17,6 +17,7 @@ import (
 )
 
 func TestWebRTCServer_HandleSDP(t *testing.T) {
+	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(nil, nil))
 	sdpRequests := make(chan relayerwebrtc.SDPRequest, 1)
 	iceCandidates := make(chan relayerwebrtc.ICECandidate)
@@ -24,7 +25,7 @@ func TestWebRTCServer_HandleSDP(t *testing.T) {
 	mockGRPCClient := &mockGRPCClient{}
 	mockGRPCClient.On("Close").Return(nil)
 
-	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
+	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, nil, sdpRequests, iceCandidates)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
 	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{
@@ -80,7 +81,7 @@ func TestWebRTCServer_Run_CleanupOnContextCancel(t *testing.T) {
 	mockGRPCClient := &mockGRPCClient{}
 	mockGRPCClient.On("Close").Return(nil)
 
-	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
+	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, nil, sdpRequests, iceCandidates)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
 	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
@@ -139,7 +140,7 @@ func TestWebRTCServer_Run_Shutdown(t *testing.T) {
 	mockGRPCClient := &mockGRPCClient{}
 	mockGRPCClient.On("Close").Return(nil)
 
-	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
+	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, nil, sdpRequests, iceCandidates)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -163,22 +164,34 @@ func TestWebRTCServer_Run_Shutdown(t *testing.T) {
 }
 
 func TestWebRTCServer_DataChannel(t *testing.T) {
+	resolverAddress := "resolver-address"
+	publicKey := []byte{0x01, 0x02, 0x03}
 	sessionID := "test-session"
 	reqID := "test-req"
 	message := "test-message"
+	req := &pb.ResolverRequest{
+		Id:      reqID,
+		Payload: []byte(message),
+		PublicKeys: [][]byte{
+			publicKey,
+		},
+	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	sdpRequests := make(chan relayerwebrtc.SDPRequest, 1)
 	iceCandidates := make(chan relayerwebrtc.ICECandidate)
 
 	mockGRPCClient := &mockGRPCClient{}
-	mockGRPCClient.On("Execute", mock.Anything, mock.Anything).Return(&pb.ResolverResponse{
+	mockGRPCClient.On("ExecuteRequest", mock.Anything, resolverAddress, req).Return(&pb.ResolverResponse{
 		Id:      "test-id",
 		Payload: []byte(message),
 		Status:  pb.ResolverResponseStatus_RESOLVER_OK,
 	}, nil)
 
-	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
+	mockRegistryClient := &mockRegistryClient{}
+	mockRegistryClient.On("GetResolver", publicKey).Return(resolverAddress, nil)
+
+	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, mockRegistryClient, sdpRequests, iceCandidates)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
 	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
@@ -197,10 +210,6 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 		}
 	})
 
-	req := &pb.ResolverRequest{
-		Id:      reqID,
-		Payload: []byte(message),
-	}
 	reqBytes, err := json.Marshal(req)
 	assert.NoError(t, err, "Failed to marshal ResolverRequest")
 
@@ -253,7 +262,7 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 		assert.Equal(t, []byte(message), resp.Payload, "Response payload does not match")
 	}
 
-	mockGRPCClient.AssertCalled(t, "Execute", mock.Anything, mock.MatchedBy(func(req *pb.ResolverRequest) bool {
+	mockGRPCClient.AssertCalled(t, "ExecuteRequest", mock.Anything, resolverAddress, mock.MatchedBy(func(req *pb.ResolverRequest) bool {
 		return req.Id == reqID && string(req.Payload) == message
 	}))
 }
@@ -267,7 +276,22 @@ func (m *mockGRPCClient) Execute(ctx context.Context, req *pb.ResolverRequest) (
 	return args.Get(0).(*pb.ResolverResponse), args.Error(1)
 }
 
+func (m *mockGRPCClient) ExecuteRequest(ctx context.Context, address string, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
+	args := m.Called(ctx, address, req)
+	return args.Get(0).(*pb.ResolverResponse), args.Error(1)
+}
+
 func (m *mockGRPCClient) Close() error {
 	args := m.Called()
 	return args.Error(0)
+}
+
+type mockRegistryClient struct {
+	mock.Mock
+}
+
+// GetResolver mocks the GetResolver method of the RegistryClient interface.
+func (m *mockRegistryClient) GetResolver(publicKey []byte) (string, error) {
+	args := m.Called(publicKey)
+	return args.String(0), args.Error(1)
 }

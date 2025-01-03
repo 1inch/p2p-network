@@ -62,6 +62,36 @@ func Dial(ctx context.Context, url, key, contractAddress string) (*Client, error
 	}, nil
 }
 
+// GetRelayer retrieves the current relayer address from the registry.
+func (c *Client) GetRelayer() (string, error) {
+	return c.Registry.GetRelayer(&bind.CallOpts{})
+}
+
+// GetResolver fetches the resolver address associated with the given public key.
+func (c *Client) GetResolver(publicKey []byte) (string, error) {
+	return c.Registry.GetResolver(&bind.CallOpts{}, publicKey)
+}
+
+// RegisterRelayer registers a new relayer with the specified IP address.
+func (c *Client) RegisterRelayer(ctx context.Context, ipAddress string) error {
+	tx, err := c.Registry.RegisterRelayer(c.Auth, ipAddress)
+	if err != nil {
+		return err
+	}
+
+	return c.WaitForTx(ctx, tx.Hash())
+}
+
+// RegisterResolver registers a new resolver with the given IP address and public key.
+func (c *Client) RegisterResolver(ctx context.Context, ipAddress string, publicKey []byte) error {
+	tx, err := c.Registry.RegisterResolver(c.Auth, ipAddress, publicKey)
+	if err != nil {
+		return err
+	}
+
+	return c.WaitForTx(ctx, tx.Hash())
+}
+
 // Close closes ethereum client.
 func (c *Client) Close() {
 	c.client.Close()

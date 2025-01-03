@@ -177,6 +177,7 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 		Payload: []byte(message),
 		Status:  pb.ResolverResponseStatus_RESOLVER_OK,
 	}, nil)
+	mockGRPCClient.On("Close").Return(nil)
 
 	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
 	assert.NoError(t, err, "Failed to create WebRTC server")

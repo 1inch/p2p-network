@@ -1,3 +1,4 @@
+// Package registry provides client implementation for node registry.
 package registry
 
 import (

@@ -1,3 +1,5 @@
+SHELL := /bin/bash
+
 .PHONY: resolver test-resolver test-infura
 
 golang-deps:

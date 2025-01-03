@@ -9,7 +9,7 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/1inch/p2p-network/contracts"
+	"github.com/1inch/p2p-network/internal/registry"
 	"github.com/1inch/p2p-network/relayer/grpc"
 	"github.com/1inch/p2p-network/relayer/httpapi"
 	"github.com/1inch/p2p-network/relayer/webrtc"
@@ -41,7 +41,7 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 		mux.HandleFunc("POST /sdp", webrtc.SDPHandler(logger, sdpRequests))
 		mux.HandleFunc("POST /candidate", webrtc.CandidateHandler(logger, iceCandidates))
 		mux.HandleFunc("GET /relayer", func(w http.ResponseWriter, r *http.Request) {
-			client, err := contracts.Dial(r.Context(), cfg.BlockchainRPCAddress, cfg.PrivateKey, cfg.ContractAddress)
+			client, err := registry.Dial(r.Context(), cfg.BlockchainRPCAddress, cfg.PrivateKey, cfg.ContractAddress)
 			if err != nil {
 				http.Error(w, "failed to connect to Ethereum node", http.StatusInternalServerError)
 				return
@@ -143,7 +143,7 @@ func (r *Relayer) Run(ctx context.Context) error {
 }
 
 func (r *Relayer) registerRelayer(ctx context.Context) error {
-	client, err := contracts.Dial(ctx, r.Config.BlockchainRPCAddress, r.Config.PrivateKey, r.Config.ContractAddress)
+	client, err := registry.Dial(ctx, r.Config.BlockchainRPCAddress, r.Config.PrivateKey, r.Config.ContractAddress)
 	if err != nil {
 		return fmt.Errorf("failed to connect to Ethereum node: %w", err)
 	}

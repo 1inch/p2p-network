@@ -57,7 +57,7 @@ testsum:
 .PHONY: deploy_contract
 deploy_contract:
 	@echo "Deploying contract..."
-	@go test -v -tags=deploy ./...
+	@go test -v -tags=deploy ./contracts -run ^TestDeployContract$
 
 .PHONY: test_quick
 test_quick:
@@ -69,16 +69,27 @@ test-resolver:
 test-infura:
 	go test -v github.com/1inch/p2p-network/resolver -testify.m=TestInfuraEndpoint
 
-.PHONY: start_anvil
-start_anvil:
+.PHONY: start-anvil
+start-anvil:
 	@if ! command -v anvil &> /dev/null; then \
 		echo "Anvil binary not found"; \
 	elif ! pgrep -x "anvil" > /dev/null; then \
 		echo "Starting anvil on port 8545"; \
 		anvil & \
-		timeout 5 sh -c 'until nc -z localhost $(PORT); do sleep 1; done' || (echo "Anvil failed to start." && exit 1); \
+		timeout 5 sh -c 'until nc -z localhost 8545; do sleep 1; done' || (echo "Anvil failed to start." && exit 1); \
 	else \
 		echo "Anvil is already running"; \
+	fi
+
+.PHONY: stop-anvil
+stop-anvil:
+	@echo "Stopping Anvil..."
+	@pids=`ps aux | grep '[a]nvil' | awk '{print $$2}'`; \
+	if [ -n "$$pids" ]; then \
+		echo "Found Anvil PIDs: $$pids"; \
+		echo "$$pids" | xargs kill -9 && echo "Anvil processes killed."; \
+	else \
+		echo "No Anvil processes found."; \
 	fi
 
 test-integration:

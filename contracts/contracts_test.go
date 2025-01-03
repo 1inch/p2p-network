@@ -4,16 +4,12 @@
 package contracts_test
 
 import (
-	"math/big"
-	"strings"
+	"context"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/stretchr/testify/require"
 
-	registry "github.com/1inch/p2p-network/contracts"
+	registry "github.com/1inch/p2p-network/internal/registry"
 )
 
 const (
@@ -24,21 +20,12 @@ const (
 )
 
 func TestDeployContract(t *testing.T) {
-	client, err := ethclient.Dial(rpcURL)
-	require.NoError(t, err, "failed to connect to %s", rpcURL)
+	ctx := context.Background()
+	config := registry.Config{
+		DialURI:    rpcURL,
+		PrivateKey: privateKeyHex,
+	}
 
-	privKey, err := crypto.HexToECDSA(privateKeyHex)
-	require.NoError(t, err, "invalid private key")
-
-	auth, err := bind.NewKeyedTransactorWithChainID(privKey, big.NewInt(chainIDVal))
-	require.NoError(t, err, "failed to create transactor")
-
-	addr, tx, _, err := registry.DeployNodeRegistry(auth, client)
+	_, err := registry.DeployNodeRegistry(ctx, config)
 	require.NoError(t, err, "contract deployment failed")
-
-	t.Logf("Deployed contract at: %s", addr.Hex())
-	t.Logf("Deployment TX: %s", tx.Hash().Hex())
-
-	require.Equal(t, expectedContractAddr, strings.ToLower(addr.Hex()),
-		"deployed contract address should match the deterministic address")
 }

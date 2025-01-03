@@ -1,10 +1,11 @@
-package contracts
+package registry
 
 import (
 	"context"
 	"errors"
 	"time"
 
+	"github.com/1inch/p2p-network/contracts"
 	ethereum "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -19,9 +20,15 @@ var (
 	ErrTransactionFailed = errors.New("transaction failed")
 )
 
+// Config represents registry client config.
+type Config struct {
+	DialURI    string
+	PrivateKey string
+}
+
 // Client represents storage client.
 type Client struct {
-	Registry *NodeRegistry
+	Registry *contracts.NodeRegistry
 	Auth     *bind.TransactOpts
 	client   *ethclient.Client
 	ticker   *time.Ticker
@@ -44,7 +51,7 @@ func Dial(ctx context.Context, url, key, contractAddress string) (*Client, error
 		return &Client{}, err
 	}
 
-	registry, err := NewNodeRegistry(common.HexToAddress(contractAddress), client)
+	registry, err := contracts.NewNodeRegistry(common.HexToAddress(contractAddress), client)
 	if err != nil {
 		return &Client{}, err
 	}
@@ -60,6 +67,43 @@ func Dial(ctx context.Context, url, key, contractAddress string) (*Client, error
 		client:   client,
 		ticker:   time.NewTicker(200 * time.Millisecond),
 	}, nil
+}
+
+// DeployNodeRegistry deploys node registry smart contract and returns it's client.
+func DeployNodeRegistry(ctx context.Context, config Config) (*Client, error) {
+	ethClient, err := ethclient.Dial(config.DialURI)
+	if err != nil {
+		return &Client{}, err
+	}
+
+	privateKey, err := crypto.HexToECDSA(config.PrivateKey)
+	if err != nil {
+		return &Client{}, err
+	}
+
+	chainID, err := ethClient.ChainID(ctx)
+	if err != nil {
+		return &Client{}, err
+	}
+
+	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
+	if err != nil {
+		return &Client{}, err
+	}
+
+	_, tx, registry, err := contracts.DeployNodeRegistry(auth, ethClient)
+	if err != nil {
+		return &Client{}, err
+	}
+
+	client := &Client{
+		Registry: registry,
+		Auth:     auth,
+		client:   ethClient,
+		ticker:   time.NewTicker(200 * time.Millisecond),
+	}
+
+	return client, client.WaitForTx(ctx, tx.Hash())
 }
 
 // Close closes ethereum client.

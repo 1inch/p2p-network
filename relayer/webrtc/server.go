@@ -88,6 +88,8 @@ func New(
 
 // HandleSDP processes an SDP offer, sets up a PeerConnection, and generates an SDP answer.
 func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*webrtc.SessionDescription, error) {
+	w.logger.Debug("handle sdp", slog.String("sesionID", sessionID))
+
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{{URLs: []string{w.ICEServer}}},
 	})

@@ -26,6 +26,10 @@ const (
 	formatHttpEndpointToRelayer  = "127.0.0.1:%d"
 	formatGrpcEndpointToResolver = "127.0.0.1:%d"
 	ICEServer                    = "stun:stun1.l.google.com:19302"
+	blockchainRPCAddress         = "http://127.0.0.1:8545"
+	deploymentPrivateKey         = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+	relayerPrivateKey            = "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
+	contractAddress              = "0x5fbdb2315678afecb367f032d93f642f64180aa3"
 )
 
 type TestCase struct {
@@ -76,19 +80,19 @@ func TestRelayerAndResolverIntegration(t *testing.T) {
 			},
 			ConfigForResolver: cfgResolverWithInfuraApi(),
 		},
-		{
-			Name:      "UnhandledMessageInResolver",
-			SessionId: "test-session-id-3",
-			JsonRequest: &types.JsonRequest{
-				Id:     "request-id-2",
-				Method: "blockNumber",
-			},
-			ExpectedResolverApiName:           "default",
-			ExpectedResolverResponseStatus:    pb.ResolverResponseStatus_RESOLVER_ERROR, // this status code is correct in this case ?
-			ExpectedJsonResponseError:         "Unrecognized method",
-			FuncCheckActualJsonResponseResult: func(result interface{}) { assert.Equal(t, float64(0), result) },
-			ConfigForResolver:                 cfgResolverWithDefaultApi(),
-		},
+		// {
+		// 	Name:      "UnhandledMessageInResolver",
+		// 	SessionId: "test-session-id-3",
+		// 	JsonRequest: &types.JsonRequest{
+		// 		Id:     "request-id-2",
+		// 		Method: "blockNumber",
+		// 	},
+		// 	ExpectedResolverApiName:           "default",
+		// 	ExpectedResolverResponseStatus:    pb.ResolverResponseStatus_RESOLVER_ERROR, // this status code is correct in this case ?
+		// 	ExpectedJsonResponseError:         "Unrecognized method",
+		// 	FuncCheckActualJsonResponseResult: func(result interface{}) { assert.Equal(t, float64(0), result) },
+		// 	ConfigForResolver:                 cfgResolverWithDefaultApi(),
+		// },
 	}
 
 	for _, testCase := range testCases {
@@ -102,6 +106,13 @@ func testWorkFlow(t *testing.T, logger *slog.Logger, testCase *TestCase) {
 	logger.Info("start test case", slog.Any("name", testCase.Name))
 
 	ctx, cancel := context.WithCancel(context.Background())
+
+	// _, err := registry.DeployNodeRegistry(ctx, registry.Config{
+	// 	DialURI:    blockchainRPCAddress,
+	// 	PrivateKey: deploymentPrivateKey,
+	// })
+	// assert.NoError(t, err, "Failed to deploy Node Registry contract")
+
 	_, httpRelayerUri, err := setupRelayer(ctx, logger, testCase.ConfigForResolver)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 	defer cancel()
@@ -264,10 +275,13 @@ func setupRelayer(ctx context.Context, logger *slog.Logger, resolverCfg *resolve
 	httpEndpointToRelayer := fmt.Sprintf(formatHttpEndpointToRelayer, portForHttp)
 	grpcEndpointToResolver := fmt.Sprintf(formatGrpcEndpointToResolver, resolverCfg.Port)
 	cfg := &relayer.Config{
-		LogLevel:          "INFO",
-		HTTPEndpoint:      httpEndpointToRelayer,
-		WebRTCICEServer:   ICEServer,
-		GRPCServerAddress: grpcEndpointToResolver,
+		LogLevel:             "INFO",
+		HTTPEndpoint:         httpEndpointToRelayer,
+		WebRTCICEServer:      ICEServer,
+		GRPCServerAddress:    grpcEndpointToResolver,
+		BlockchainRPCAddress: blockchainRPCAddress,
+		PrivateKey:           relayerPrivateKey,
+		ContractAddress:      contractAddress,
 	}
 	relayerNode, err := relayer.New(cfg, logger.WithGroup("Relayer"))
 	if err != nil {

@@ -3,14 +3,17 @@ package relayer
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
-	"sync"
 
+	"github.com/1inch/p2p-network/internal/registry"
 	"github.com/1inch/p2p-network/relayer/grpc"
 	"github.com/1inch/p2p-network/relayer/httpapi"
 	"github.com/1inch/p2p-network/relayer/webrtc"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -20,7 +23,6 @@ type Relayer struct {
 	Logger       *slog.Logger
 	WebRTCServer *webrtc.Server
 	HTTPServer   *httpapi.Server
-	wg           sync.WaitGroup
 }
 
 // New initializes a new Relayer instance with provided configuration and logger.
@@ -38,6 +40,36 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 		mux := http.NewServeMux()
 		mux.HandleFunc("POST /sdp", webrtc.SDPHandler(logger, sdpRequests))
 		mux.HandleFunc("POST /candidate", webrtc.CandidateHandler(logger, iceCandidates))
+		mux.HandleFunc("GET /relayer", func(w http.ResponseWriter, r *http.Request) {
+			client, err := registry.Dial(r.Context(), registry.Config{
+				DialURI:         cfg.BlockchainRPCAddress,
+				PrivateKey:      cfg.PrivateKey,
+				ContractAddress: cfg.ContractAddress,
+			})
+			if err != nil {
+				http.Error(w, "failed to connect to Ethereum node", http.StatusInternalServerError)
+				return
+			}
+			defer client.Close()
+
+			relayer, err := client.Registry.GetRelayer(&bind.CallOpts{})
+			if err != nil {
+				http.Error(w, "failed to get closest relayer node", http.StatusInternalServerError)
+				return
+			}
+
+			resp := struct {
+				IPAddress string   `json:"ip_address"`
+				Resolvers [][]byte `json:"resolvers"`
+			}{IPAddress: relayer.Ip, Resolvers: relayer.PublicKeys}
+
+			w.Header().Set("Content-Type", "application/json")
+			err = json.NewEncoder(w).Encode(resp)
+			if err != nil {
+				http.Error(w, "failed to encode response", http.StatusInternalServerError)
+				return
+			}
+		})
 		httpServer = httpapi.New(logger.WithGroup("httpapi"), httpListener, mux)
 	}
 
@@ -72,6 +104,17 @@ func (r *Relayer) Run(ctx context.Context) error {
 	defer cancel()
 
 	group.Go(func() error {
+		r.Logger.Info("register relayer with node registry", slog.String("ip_address", r.HTTPServer.Addr()))
+		err := r.registerRelayer(childCtx)
+		if err != nil {
+			r.Logger.Error("failed to register relayer with node registry", slog.Any("err", err))
+			return err
+		}
+
+		return nil
+	})
+
+	group.Go(func() error {
 		defer cancel()
 
 		r.Logger.Info("http server started", slog.String("addr", r.HTTPServer.Addr()))
@@ -85,12 +128,10 @@ func (r *Relayer) Run(ctx context.Context) error {
 	})
 
 	group.Go(func() error {
-		defer cancel()
-
 		r.Logger.Info("webrtc server started", slog.String("iceserver", r.Config.WebRTCICEServer))
 		err := r.WebRTCServer.Run(childCtx)
 		if err != nil {
-			r.Logger.Error("http server failed to serve", slog.Any("err", err))
+			r.Logger.Error("webrtc server failed to serve", slog.Any("err", err))
 			return err
 		}
 
@@ -102,6 +143,31 @@ func (r *Relayer) Run(ctx context.Context) error {
 		r.Logger.Error("relayer encountered an error", slog.Any("err", err))
 		return err
 	}
+
+	return nil
+}
+
+func (r *Relayer) registerRelayer(ctx context.Context) error {
+	client, err := registry.Dial(ctx, registry.Config{
+		DialURI:         r.Config.BlockchainRPCAddress,
+		PrivateKey:      r.Config.PrivateKey,
+		ContractAddress: r.Config.ContractAddress,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to connect to Ethereum node: %w", err)
+	}
+	defer client.Close()
+
+	tx, err := client.Registry.RegisterRelayer(client.Auth, r.Config.HTTPEndpoint)
+	if err != nil {
+		return fmt.Errorf("failed to register relayer: %w", err)
+	}
+
+	if err := client.WaitForTx(ctx, tx.Hash()); err != nil {
+		return fmt.Errorf("wait for transaction error: %w", err)
+	}
+
+	r.Logger.Debug("successfully sent register relayer tx", slog.String("tx_hash", tx.Hash().String()))
 
 	return nil
 }

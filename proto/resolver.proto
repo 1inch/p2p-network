@@ -9,16 +9,10 @@ message ResolverRequest {
   bool encrypted = 3;
 }
 
-enum ResolverResponseStatus {
-  RESOLVER_OK = 0;
-  RESOLVER_ERROR = 1;
-}
-
 message ResolverResponse {
   string id = 1;
   bytes payload = 2;
   bool encrypted = 3;
-  ResolverResponseStatus status = 4;
 }
 
 

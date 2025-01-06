@@ -8,11 +8,21 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"os"
 
 	pb "github.com/1inch/p2p-network/proto"
 	"github.com/1inch/p2p-network/resolver/types"
-	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
+
+const (
+	errMessageForInvalidArgumens     = "error when process request"
+	fmtDescriptionErrorUnknownMethod = "unknown handle method: %s"
+)
+
+var (
+	errWrongRequest = errors.New("wrong request body")
+	errEmptyParam   = errors.New("empty parameter")
 )
 
 // Server represents gRPC server.
@@ -23,9 +33,7 @@ type Server struct {
 
 	logger *slog.Logger
 
-	grpcServer *grpc.Server
-
-	handlers []ApiHandler
+	handler ApiHandler
 }
 
 func generateKey() (*rsa.PrivateKey, error) {
@@ -37,57 +45,112 @@ func generateKey() (*rsa.PrivateKey, error) {
 	return p, nil
 }
 
-var errNoHandlers = errors.New("No API handlers passed to server")
-
 // newServer creates new RpcServer.
-func newServer(handlers []ApiHandler) (*Server, error) {
-	if len(handlers) == 0 {
-		return nil, errNoHandlers
-	}
+func newServer(logger *slog.Logger, handler ApiHandler) (*Server, error) {
 	privKey, err := generateKey()
 	if err != nil {
 		return nil, err
 	}
-	return &Server{privateKey: privKey, logger: slog.New(slog.NewTextHandler(os.Stdout, nil)).With("module", "server"), handlers: handlers}, nil
+	return &Server{privateKey: privKey, logger: logger.With("module", "server"), handler: handler}, nil
 }
 
-func (s *Server) processRequest(req *pb.ResolverRequest) ([]byte, error) {
-	// Unmarshal JSON
+// Execute executes ResolverRequest.
+func (s *Server) Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
+	s.logger.Info("###Incoming request", "id", req.Id)
+
+	err := s.validateResolverRequest(req)
+	response := &pb.ResolverResponse{
+		Id: req.Id,
+	}
+
+	if err != nil {
+		return nil, s.formatGrpcError(response, err)
+	}
+
+	jsonReq, err := s.getJsonRequest(req)
+	if err != nil {
+		return nil, s.formatGrpcError(response, err)
+	}
+
+	resp, err := s.processRequest(jsonReq)
+
+	if err != nil {
+		return nil, s.formatGrpcError(response, err)
+	}
+
+	response.Payload = resp
+
+	return response, nil
+}
+
+func (s *Server) validateResolverRequest(req *pb.ResolverRequest) error {
+	// return after this check, because maybe nil pointer exception in next checks
+	if req == nil {
+		return errEmptyParam
+	}
+
+	if req.Id == "" {
+		return errEmptyParam
+	}
+
+	if len(req.Payload) == 0 {
+		return errEmptyParam
+	}
+
+	return nil
+}
+
+func (s *Server) getJsonRequest(req *pb.ResolverRequest) (*types.JsonRequest, error) {
 	var jsonReq types.JsonRequest
 	err := json.Unmarshal(req.Payload, &jsonReq)
 	if err != nil {
+		s.logger.Error("error when try unmarshal request payload")
+		return nil, err
+	}
+	return &jsonReq, nil
+}
+
+func (s *Server) processRequest(jsonReq *types.JsonRequest) ([]byte, error) {
+	jsonResponses, err := s.handler.Process(jsonReq)
+	if err != nil {
+		s.logger.Error("error when process request in handler")
 		return nil, err
 	}
 
-	jsonResponses := make(map[string]interface{})
-	for _, h := range s.handlers {
-		jsonResp := h.Process(&jsonReq)
-		jsonResponses[h.Name()] = jsonResp
-	}
 	byteArr, err := json.Marshal(jsonResponses)
 	if err != nil {
+		s.logger.Error("error when try marshal json responses ")
 		return nil, err
 	}
 
 	return byteArr, nil
 }
 
-// Execute executes ResolverRequest.
-func (s *Server) Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
-	s.logger.Info("###Incoming request", "id", req.Id)
-	resp, err := s.processRequest(req)
-	var respStatus pb.ResolverResponseStatus
-	if err != nil {
-		respStatus = pb.ResolverResponseStatus_RESOLVER_ERROR
-		slog.Error("processRequest() error", "err", err)
-	} else {
-		respStatus = pb.ResolverResponseStatus_RESOLVER_OK
+// formatGrpcError function describe create grpc error and map to go error
+// pb.ResolverResponse needed for add it in details. In the response stored request id.
+func (s *Server) formatGrpcError(resp *pb.ResolverResponse, err error) error {
+	var code codes.Code
+	switch {
+	case s.itsKnownError(err):
+		{
+			code = codes.InvalidArgument
+		}
+	default:
+		{
+			code = codes.Internal
+		}
 	}
 
-	response := &pb.ResolverResponse{
-		Id:      req.Id,
-		Payload: resp,
-		Status:  respStatus,
+	errStatus, err := status.New(code, err.Error()).WithDetails(resp)
+	if err != nil {
+		return status.New(codes.Internal, "error when try format err status").Err()
 	}
-	return response, nil
+	return errStatus.Err()
+}
+
+func (s *Server) itsKnownError(err error) bool {
+	return errors.Is(err, errEmptyBlock) ||
+		errors.Is(err, errEmptyAddress) ||
+		errors.Is(err, errUnrecognizedMethod) ||
+		errors.Is(err, errWrongParamCount)
 }

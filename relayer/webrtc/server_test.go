@@ -175,7 +175,6 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 	mockGRPCClient.On("Execute", mock.Anything, mock.Anything).Return(&pb.ResolverResponse{
 		Id:      "test-id",
 		Payload: []byte(message),
-		Status:  pb.ResolverResponseStatus_RESOLVER_OK,
 	}, nil)
 	mockGRPCClient.On("Close").Return(nil)
 

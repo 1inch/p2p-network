@@ -1,10 +1,12 @@
-package contracts
+// Package registry provides client implementation for node registry.
+package registry
 
 import (
 	"context"
 	"errors"
 	"time"
 
+	"github.com/1inch/p2p-network/contracts"
 	ethereum "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -19,22 +21,29 @@ var (
 	ErrTransactionFailed = errors.New("transaction failed")
 )
 
+// Config represents registry client config.
+type Config struct {
+	DialURI         string
+	PrivateKey      string
+	ContractAddress string
+}
+
 // Client represents storage client.
 type Client struct {
-	Registry *NodeRegistry
+	Registry *contracts.NodeRegistry
 	Auth     *bind.TransactOpts
 	client   *ethclient.Client
 	ticker   *time.Ticker
 }
 
 // Dial creates eth client, new smart-contract instance, auth.
-func Dial(ctx context.Context, url, key, contractAddress string) (*Client, error) {
-	client, err := ethclient.Dial(url)
+func Dial(ctx context.Context, config Config) (*Client, error) {
+	client, err := ethclient.Dial(config.DialURI)
 	if err != nil {
 		return &Client{}, err
 	}
 
-	privateKey, err := crypto.HexToECDSA(key)
+	privateKey, err := crypto.HexToECDSA(config.PrivateKey)
 	if err != nil {
 		return &Client{}, err
 	}
@@ -44,7 +53,7 @@ func Dial(ctx context.Context, url, key, contractAddress string) (*Client, error
 		return &Client{}, err
 	}
 
-	registry, err := NewNodeRegistry(common.HexToAddress(contractAddress), client)
+	registry, err := contracts.NewNodeRegistry(common.HexToAddress(config.ContractAddress), client)
 	if err != nil {
 		return &Client{}, err
 	}

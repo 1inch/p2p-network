@@ -1,3 +1,5 @@
+SHELL := /bin/bash
+
 .PHONY: resolver test-resolver test-infura
 
 golang-deps:
@@ -69,6 +71,9 @@ test_quick:
 
 test-resolver:
 	go test -v github.com/1inch/p2p-network/resolver ./resolver/...
+
+test-encryption:
+	go test -v github.com/1inch/p2p-network/internal/encryption
 
 test-infura:
 	go test -v github.com/1inch/p2p-network/resolver -testify.m=TestInfuraEndpoint

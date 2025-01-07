@@ -2,6 +2,7 @@
 package resolver
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
@@ -11,6 +12,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
+
+var errNoHandlerApiInConfig = errors.New("no handler api in config")
 
 func setupRpcServer(listener net.Listener, server *Server, opts ...grpc.ServerOption) *grpc.Server {
 	grpcServer := grpc.NewServer(opts...)
@@ -42,16 +45,7 @@ func Run(cfg *Config) (*grpc.Server, error) {
 	}
 	log.Printf("Listening on %d\n", cfg.Port)
 
-	// Create server instance
-	handlers := make([]ApiHandler, 0)
-	if cfg.Apis.Default.Enabled {
-		handlers = append(handlers, NewDefaultApiHandler(cfg.Apis.Default))
-	}
-	if cfg.Apis.Infura.Enabled {
-		handlers = append(handlers, NewInfuraApiHandler(cfg.Apis.Infura))
-	}
-
-	server, err := newServer(handlers)
+	server, err := newServer(cfg)
 	if err != nil {
 		slog.Error("newServer failed", "error", err)
 		return nil, err

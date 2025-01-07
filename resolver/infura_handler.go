@@ -2,7 +2,6 @@ package resolver
 
 import (
 	"log/slog"
-	"os"
 
 	"github.com/1inch/p2p-network/resolver/types"
 	gethrpc "github.com/ethereum/go-ethereum/rpc"
@@ -14,32 +13,26 @@ type infuraApiHandler struct {
 }
 
 // NewInfuraApiHandler creates an Infura API handler instance
-func NewInfuraApiHandler(cfg InfuraApiConfig) ApiHandler {
+func NewInfuraApiHandler(cfg InfuraApiConfig, logger *slog.Logger) ApiHandler {
 	client, err := gethrpc.DialHTTP("https://mainnet.infura.io/v3/" + cfg.Key)
 	if err != nil {
 		slog.Error("Error creating Infura API client", "err", err)
 		return nil
 	}
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil)).With("module", "api-infura")
-	return &infuraApiHandler{client, logger}
-}
-
-// Name returns API name
-func (h *infuraApiHandler) Name() string {
-	return "infura"
+	return &infuraApiHandler{client, logger.With("module", "api-infura")}
 }
 
 // Process acts as an API wrapper for JSON payloads coming through gRPC
-func (h *infuraApiHandler) Process(req *types.JsonRequest) *types.JsonResponse {
+func (h *infuraApiHandler) Process(req *types.JsonRequest) (*types.JsonResponse, error) {
 	switch req.Method {
 	case "GetWalletBalance":
 		balance, err := h.getWalletBalance(req.Params)
 		if err != nil {
-			return &types.JsonResponse{Id: req.Id, Result: 0, Error: err.Error()}
+			return &types.JsonResponse{Id: req.Id, Result: 0}, err
 		}
-		return &types.JsonResponse{Id: req.Id, Result: balance}
+		return &types.JsonResponse{Id: req.Id, Result: balance}, nil
 	default:
-		return &types.JsonResponse{Id: req.Id, Result: 0, Error: errUnrecognizedMethod.Error()}
+		return &types.JsonResponse{Id: req.Id, Result: 0}, errUnrecognizedMethod
 	}
 }
 
@@ -50,12 +43,31 @@ func (h *infuraApiHandler) getWalletBalance(params []string) (string, error) {
 	}
 	address := params[0]
 	block := params[1]
+
+	err := h.validateRequest(address, block)
+	if err != nil {
+		h.logger.Error("error when try validate request for GetWalletBalance")
+		return "", err
+	}
+
 	var result string
-	err := h.client.Call(&result, "eth_getBalance", address, block)
+	err = h.client.Call(&result, "eth_getBalance", address, block)
 	if err != nil {
 		h.logger.Error("Error invoking JSON-RPC request", "err", err)
 		return "", err
 	}
 	h.logger.Info("GetWalletBalance() processed")
 	return result, nil
+}
+
+func (h *infuraApiHandler) validateRequest(address, block string) error {
+	if address == "" {
+		return errEmptyAddress
+	}
+
+	if block == "" {
+		return errEmptyBlock
+	}
+
+	return nil
 }

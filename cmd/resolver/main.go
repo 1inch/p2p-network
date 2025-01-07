@@ -123,7 +123,7 @@ func cliCommandRegistration() cli.Command {
 				Required: true,
 			},
 			// TODO PrivateKey this volume cant be a command line parameter.
-			// I think need move configurate private key from file in future.
+			// I think need move configura private key from file in future.
 			&cli.StringFlag{
 				Name:     "privKey",
 				Usage:    "account private key in hex which pay fee for register resolver",

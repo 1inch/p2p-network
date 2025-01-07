@@ -21,12 +21,14 @@ var (
 	errInvalidFormatIp      = errors.New("invalid format for ip")
 )
 
+// RegistrationResolver describe registration new resolver on blockchain registry
 type RegistrationResolver struct {
 	logger       *slog.Logger
 	ethClient    *ethclient.Client
 	nodeRegistry *contracts.NodeRegistry
 }
 
+// NewRegistrationResolver create new instans RegistrationResolver
 func NewRegistrationResolver(logger *slog.Logger, ethUrl string, contractAddr string) (*RegistrationResolver, error) {
 	client, err := ethclient.Dial(ethUrl)
 	if err != nil {
@@ -49,6 +51,7 @@ func NewRegistrationResolver(logger *slog.Logger, ethUrl string, contractAddr st
 	}, nil
 }
 
+// Register workflow for registration resolver to blockchain registry
 // TODO Register maybe need added configuration limit gas price and gas limit,
 func (r *RegistrationResolver) Register(ctx context.Context, account string, hexPrivKey string, ip string, encodedPublicKey string) (*common.Hash, error) {
 	err := validateAddress(account)

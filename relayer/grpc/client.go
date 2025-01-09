@@ -3,6 +3,7 @@ package grpc
 
 import (
 	"context"
+	"fmt"
 
 	pb "github.com/1inch/p2p-network/proto"
 	"google.golang.org/grpc"
@@ -35,4 +36,24 @@ func (c *Client) Close() error {
 // Execute wraps the Execute RPC call.
 func (c *Client) Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
 	return c.executeClient.Execute(ctx, req)
+}
+
+// ExecuteRequest wraps the Execute RPC call.
+func (c *Client) ExecuteRequest(ctx context.Context, address string, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
+	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if cerr := conn.Close(); cerr != nil {
+			err = fmt.Errorf("failed to close gRPC connection: %w", cerr)
+		}
+	}()
+
+	response, executeErr := pb.NewExecuteClient(conn).Execute(ctx, req)
+	if executeErr != nil {
+		return nil, executeErr
+	}
+
+	return response, err
 }

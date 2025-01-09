@@ -2,6 +2,6 @@ log_level: DEBUG
 http_endpoint: 127.0.0.1:8080
 webrtc_ice_server: stun:stun1.l.google.com:19302
 grpc_server_address: 127.0.0.1:0
-blockchain_rpc_address: "http://127.0.0.1:8545"
+blockchain_rpc_address: http://127.0.0.1:8545
 contract_address: 0x5fbdb2315678afecb367f032d93f642f64180aa3
 private_key: 59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d

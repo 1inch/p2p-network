@@ -37,7 +37,7 @@ type Client struct {
 }
 
 // Dial creates eth client, new smart-contract instance, auth.
-func Dial(ctx context.Context, config Config) (*Client, error) {
+func Dial(ctx context.Context, config *Config) (*Client, error) {
 	client, err := ethclient.Dial(config.DialURI)
 	if err != nil {
 		return &Client{}, err
@@ -72,7 +72,7 @@ func Dial(ctx context.Context, config Config) (*Client, error) {
 }
 
 // DeployNodeRegistry deploys node registry smart contract and returns it's client.
-func DeployNodeRegistry(ctx context.Context, config Config) (*Client, error) {
+func DeployNodeRegistry(ctx context.Context, config *Config) (*Client, error) {
 	ethClient, err := ethclient.Dial(config.DialURI)
 	if err != nil {
 		return &Client{}, err
@@ -106,6 +106,41 @@ func DeployNodeRegistry(ctx context.Context, config Config) (*Client, error) {
 	}
 
 	return client, client.WaitForTx(ctx, tx.Hash())
+}
+
+// GetRelayer retrieves the current relayer address from the registry.
+func (c *Client) GetRelayer() (string, [][]byte, error) {
+	resp, err := c.Registry.GetRelayer(&bind.CallOpts{})
+	if err != nil {
+		return "", nil, err
+	}
+
+	return resp.Ip, resp.PublicKeys, nil
+}
+
+// GetResolver fetches the resolver address associated with the given public key.
+func (c *Client) GetResolver(publicKey []byte) (string, error) {
+	return c.Registry.GetResolver(&bind.CallOpts{}, publicKey)
+}
+
+// RegisterRelayer registers a new relayer with the specified IP address.
+func (c *Client) RegisterRelayer(ctx context.Context, ipAddress string) error {
+	tx, err := c.Registry.RegisterRelayer(c.Auth, ipAddress)
+	if err != nil {
+		return err
+	}
+
+	return c.WaitForTx(ctx, tx.Hash())
+}
+
+// RegisterResolver registers a new resolver with the given IP address and public key.
+func (c *Client) RegisterResolver(ctx context.Context, ipAddress string, publicKey []byte) error {
+	tx, err := c.Registry.RegisterResolver(c.Auth, ipAddress, publicKey)
+	if err != nil {
+		return err
+	}
+
+	return c.WaitForTx(ctx, tx.Hash())
 }
 
 // Close closes ethereum client.

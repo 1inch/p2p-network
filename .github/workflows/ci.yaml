@@ -58,6 +58,14 @@ jobs:
         run: |
           make start-anvil
 
+      - name: Deploy Contract
+        run: |
+          make deploy_contract
+
+      - name: Register Resolver
+        run: |
+          make register_resolver
+
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@v1.12.0
 

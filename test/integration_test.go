@@ -71,20 +71,20 @@ func TestPositiveCases(t *testing.T) {
 		},
 	}
 
+	registryClient, err := registry.Dial(context.Background(), &registry.Config{
+		DialURI:         dialURL,
+		PrivateKey:      privateKey,
+		ContractAddress: contractAddress,
+	})
+	assert.NoError(t, err, "Failed to create registry client")
+
+	privKey, err := crypto.HexToECDSA(resolverPrivateKey)
+	assert.NoError(t, err, "invalid private key")
+	resolverPublicKeyBytes := crypto.CompressPubkey(&privKey.PublicKey)
+
+	registryClient.RegisterResolver(context.Background(), grpcEndpointToResolver, resolverPublicKeyBytes)
+
 	for _, testCase := range testCases {
-		registryClient, err := registry.Dial(context.Background(), &registry.Config{
-			DialURI:         dialURL,
-			PrivateKey:      privateKey,
-			ContractAddress: contractAddress,
-		})
-		assert.NoError(t, err, "Failed to create registry client")
-
-		privKey, err := crypto.HexToECDSA(resolverPrivateKey)
-		assert.NoError(t, err, "invalid private key")
-		resolverPublicKeyBytes := crypto.CompressPubkey(&privKey.PublicKey)
-
-		registryClient.RegisterResolver(context.Background(), grpcEndpointToResolver, resolverPublicKeyBytes)
-
 		t.Run(testCase.Name, func(t *testing.T) {
 			positiveTestWorkFlow(t, logger, &testCase)
 		})
@@ -149,13 +149,17 @@ func testWorkFlowAndReturnResponseChan(t *testing.T, logger *slog.Logger, cfg *r
 	payload, err := json.Marshal(jsonReq)
 	assert.NoError(t, err, "Failed to marshal JsonRequest")
 
+	privKey, err := crypto.HexToECDSA(resolverPrivateKey)
+	assert.NoError(t, err, "invalid private key")
+	resolverPublicKeyBytes := crypto.CompressPubkey(&privKey.PublicKey)
+
 	req := &pb.IncomingMessage{
 		Request: &pb.ResolverRequest{
 			Id:      jsonReq.Id,
 			Payload: payload,
 		},
 		PublicKeys: [][]byte{
-			[]byte("public-key"),
+			resolverPublicKeyBytes,
 		},
 	}
 	reqBytes, err := proto.Marshal(req)
@@ -212,7 +216,11 @@ func positiveTestWorkFlow(t *testing.T, logger *slog.Logger, testCase *positiveT
 	assert.NoError(t, err, "Failed to unmarshal response")
 
 	if result, ok := resp.Result.(*pb.OutgoingMessage_Response); ok {
-		testCase.FuncCheckActualJsonResponseResult(result.Response.Payload)
+		var jsonResp types.JsonResponse
+		err = json.Unmarshal(result.Response.Payload, &jsonResp)
+		assert.NoError(t, err, "Failed to unmarshal response")
+
+		testCase.FuncCheckActualJsonResponseResult(jsonResp.Result)
 	}
 }
 

@@ -5,24 +5,17 @@ RUN apk add --no-cache make
 WORKDIR /app
 
 COPY . .
+
 RUN go mod download
 
-RUN make build
+ENTRYPOINT ["make", "build_relayer"]
 
 
 FROM alpine:3.21 as relayer
 WORKDIR /app
 
 COPY --from=builder /app/bin/relayer .
-COPY --from=builder /app/config.yaml .
+COPY --from=builder /app/assets/relayer.config.yaml /app/config.yaml
 
 ENTRYPOINT ["./relayer", "run"]
 CMD ["--config", "config.yaml"]
-
-
-FROM alpine:3.21 as resolver
-WORKDIR /app
-
-COPY --from=builder /app/bin/resolver .
-
-ENTRYPOINT ["./resolver", "run"]

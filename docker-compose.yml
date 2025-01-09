@@ -23,7 +23,7 @@ services:
     build:
       context: .
       target: relayer
-      dockerfile: Dockerfile-relayer
+      dockerfile: ./relayer/Dockerfile
     volumes:
       - "./assets/relayer.config.yaml:/app/config.yaml"
     depends_on:
@@ -36,7 +36,7 @@ services:
     build:
       context: .
       target: resolver
-      dockerfile: Dockerfile-resolver
+      dockerfile: ./resolver/Dockerfile
     volumes:
       - "./assets/resolver.config.yaml:/app/config.yaml"
     depends_on:

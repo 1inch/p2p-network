@@ -72,7 +72,7 @@ func Dial(ctx context.Context, config *Config) (*Client, error) {
 }
 
 // DeployNodeRegistry deploys node registry smart contract and returns it's client.
-func DeployNodeRegistry(ctx context.Context, config Config) (*Client, error) {
+func DeployNodeRegistry(ctx context.Context, config *Config) (*Client, error) {
 	ethClient, err := ethclient.Dial(config.DialURI)
 	if err != nil {
 		return &Client{}, err

@@ -42,14 +42,15 @@ func TestRegisterResolver(t *testing.T) {
 	require.NoError(t, err, "invalid private key")
 	resolverPublicKeyBytes := crypto.CompressPubkey(&privKey.PublicKey)
 
-	client, err := registry.Dial(ctx, rpcURL, resolverPrivateKey, contractAddr)
+	client, err := registry.Dial(ctx, &registry.Config{
+		DialURI:         rpcURL,
+		PrivateKey:      privateKeyHex,
+		ContractAddress: contractAddr,
+	})
 	require.NoError(t, err, "failed to connect to %s", rpcURL)
 
 	err = client.RegisterResolver(ctx, resolverIP, resolverPublicKeyBytes)
 	require.NoError(t, err, "contract deployment failed")
-
-	err = client.WaitForTx(ctx, tx.Hash())
-	require.NoError(t, err, "contract wait for tx failed")
 
 	ip, err := client.Registry.GetResolver(&bind.CallOpts{}, resolverPublicKeyBytes)
 	require.NoError(t, err, "contract get relayer failed")

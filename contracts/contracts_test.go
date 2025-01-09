@@ -23,7 +23,7 @@ const (
 
 func TestDeployContract(t *testing.T) {
 	ctx := context.Background()
-	config := registry.Config{
+	config := &registry.Config{
 		DialURI:    rpcURL,
 		PrivateKey: privateKeyHex,
 	}

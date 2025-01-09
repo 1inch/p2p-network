@@ -70,7 +70,7 @@ func TestPositiveCases(t *testing.T) {
 		},
 	}
 
-	registryClient, err := registry.Dial(context.Background(), &registry.Config{
+	registryClient, err := registry.DeployNodeRegistry(context.Background(), &registry.Config{
 		DialURI:         dialURL,
 		PrivateKey:      privateKey,
 		ContractAddress: contractAddress,

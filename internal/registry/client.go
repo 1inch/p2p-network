@@ -37,7 +37,7 @@ type Client struct {
 }
 
 // Dial creates eth client, new smart-contract instance, auth.
-func Dial(ctx context.Context, config Config) (*Client, error) {
+func Dial(ctx context.Context, config *Config) (*Client, error) {
 	client, err := ethclient.Dial(config.DialURI)
 	if err != nil {
 		return &Client{}, err
@@ -72,8 +72,13 @@ func Dial(ctx context.Context, config Config) (*Client, error) {
 }
 
 // GetRelayer retrieves the current relayer address from the registry.
-func (c *Client) GetRelayer() (string, error) {
-	return c.Registry.GetRelayer(&bind.CallOpts{})
+func (c *Client) GetRelayer() (string, [][]byte, error) {
+	resp, err := c.Registry.GetRelayer(&bind.CallOpts{})
+	if err != nil {
+		return "", nil, err
+	}
+
+	return resp.Ip, resp.PublicKeys, nil
 }
 
 // GetResolver fetches the resolver address associated with the given public key.

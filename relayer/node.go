@@ -40,7 +40,7 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 		mux.HandleFunc("POST /sdp", webrtc.SDPHandler(logger, sdpRequests))
 		mux.HandleFunc("POST /candidate", webrtc.CandidateHandler(logger, iceCandidates))
 		mux.HandleFunc("GET /relayer", func(w http.ResponseWriter, r *http.Request) {
-			client, err := registry.Dial(r.Context(), registry.Config{
+			client, err := registry.Dial(r.Context(), &registry.Config{
 				DialURI:         cfg.BlockchainRPCAddress,
 				PrivateKey:      cfg.PrivateKey,
 				ContractAddress: cfg.ContractAddress,
@@ -51,7 +51,7 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 			}
 			defer client.Close()
 
-			ip, err := client.GetRelayer()
+			ip, resolvers, err := client.GetRelayer()
 			if err != nil {
 				http.Error(w, "failed to get closest relayer node", http.StatusInternalServerError)
 				return
@@ -60,7 +60,7 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 			resp := struct {
 				IPAddress string   `json:"ip_address"`
 				Resolvers [][]byte `json:"resolvers"`
-			}{IPAddress: relayer.Ip, Resolvers: relayer.PublicKeys}
+			}{IPAddress: ip, Resolvers: resolvers}
 
 			w.Header().Set("Content-Type", "application/json")
 			err = json.NewEncoder(w).Encode(resp)
@@ -82,7 +82,11 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 			logger.Error("failed to initialize grpc client", slog.Any("err", err))
 			return nil, err
 		}
-		registryClient, err := contracts.Dial(ctx, cfg.BlockchainRPCAddress, cfg.PrivateKey, cfg.ContractAddress)
+		registryClient, err := registry.Dial(ctx, &registry.Config{
+			DialURI:         cfg.BlockchainRPCAddress,
+			PrivateKey:      cfg.PrivateKey,
+			ContractAddress: cfg.ContractAddress,
+		})
 		if err != nil {
 			logger.Error("failed to initialize registry client", slog.Any("err", err))
 			return nil, err
@@ -153,7 +157,7 @@ func (r *Relayer) Run(ctx context.Context) error {
 }
 
 func (r *Relayer) registerRelayer(ctx context.Context) error {
-	client, err := registry.Dial(ctx, registry.Config{
+	client, err := registry.Dial(ctx, &registry.Config{
 		DialURI:         r.Config.BlockchainRPCAddress,
 		PrivateKey:      r.Config.PrivateKey,
 		ContractAddress: r.Config.ContractAddress,

@@ -252,26 +252,29 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
 		w.logger.Debug("message received", slog.String("label", dc.Label()), slog.Any("msg", msg))
 
-		var req pb.ResolverRequest
-		if err := json.Unmarshal(msg.Data, &req); err != nil {
+		var message IncommingMessage
+		if err := json.Unmarshal(msg.Data, &message); err != nil {
 			w.logger.Error("failed to unmarshal message", slog.Any("err", err))
 			return
 		}
 
-		for _, publicKey := range req.PublicKeys {
+		for _, publicKey := range message.PublicKeys {
 			address, err := w.registryClient.GetResolver(publicKey)
 			if err != nil {
 				w.logger.Error("failed to get resolver ip address", slog.Any("err", err))
 				return
 			}
 
-			response, err := w.grpcClient.ExecuteRequest(context.Background(), address, &req)
+			response, err := w.grpcClient.ExecuteRequest(context.Background(), address, message.Request)
 			if err != nil {
 				w.logger.Error("grpc execute call failed", slog.Any("err", err))
 				return
 			}
 
-			respBytes, err := json.Marshal(response)
+			respBytes, err := json.Marshal(OutcommingMessage{
+				Response:  response,
+				PublicKey: publicKey,
+			})
 			if err != nil {
 				w.logger.Error("failed to marshal response", slog.Any("err", err))
 				return

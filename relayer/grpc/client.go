@@ -3,6 +3,7 @@ package grpc
 
 import (
 	"context"
+	"fmt"
 
 	pb "github.com/1inch/p2p-network/proto"
 	"google.golang.org/grpc"
@@ -43,7 +44,16 @@ func (c *Client) ExecuteRequest(ctx context.Context, address string, req *pb.Res
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
+	defer func() {
+		if cerr := conn.Close(); cerr != nil {
+			err = fmt.Errorf("failed to close gRPC connection: %w", cerr)
+		}
+	}()
 
-	return pb.NewExecuteClient(conn).Execute(ctx, req)
+	response, executeErr := pb.NewExecuteClient(conn).Execute(ctx, req)
+	if executeErr != nil {
+		return nil, executeErr
+	}
+
+	return response, err
 }

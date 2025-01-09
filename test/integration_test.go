@@ -81,7 +81,8 @@ func TestPositiveCases(t *testing.T) {
 	assert.NoError(t, err, "invalid private key")
 	resolverPublicKeyBytes := crypto.CompressPubkey(&privKey.PublicKey)
 
-	registryClient.RegisterResolver(context.Background(), grpcEndpointToResolver, resolverPublicKeyBytes)
+	err = registryClient.RegisterResolver(context.Background(), grpcEndpointToResolver, resolverPublicKeyBytes)
+	assert.NoError(t, err, "Failed to register resolver")
 
 	for _, testCase := range testCases {
 		t.Run(testCase.Name, func(t *testing.T) {

@@ -3,7 +3,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -48,14 +47,11 @@ func main() {
 				Action: func(c *cli.Context) error {
 					cfg := &resolver.Config{}
 					// Try to load config file, if present
-					configPath := c.String("configFile")
-					if configPath != "" {
-						cfgFromFile, err := configs.LoadConfig[resolver.Config](configPath)
-						if err != nil {
-							slog.Error("Error opening config file", "err", err)
-						}
-						cfg = cfgFromFile
+					loadedCfg := loadConfigByPath(c.String("configFile"))
+					if loadedCfg != nil {
+						cfg = loadedCfg
 					}
+
 					// Override config file value for port
 					port := c.Int("port")
 					if port != 0 {
@@ -88,7 +84,7 @@ func main() {
 					return nil
 				},
 			},
-			cliCommandRegistration(),
+			cliCommandRegister(),
 		},
 	}
 	err := app.Run(os.Args)
@@ -97,47 +93,30 @@ func main() {
 	}
 }
 
-func cliCommandRegistration() cli.Command {
+func cliCommandRegister() cli.Command {
 	return cli.Command{
-		Name:  "registration",
-		Usage: "Registration resolver in node registry",
+		Name:  "register",
+		Usage: "Register resolver in node registry",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:  "eth.addr",
-				Value: "127.0.0.1",
-				Usage: "address to ethereum node",
+				Name:  "rpc_url",
+				Usage: "rpc url to blockchain node",
 			},
 			&cli.StringFlag{
-				Name:  "eth.port",
-				Value: "8545",
-				Usage: "port to ethereum node",
+				Name:  "contract_address",
+				Usage: "contract address where the register is located",
 			},
 			&cli.StringFlag{
-				Name:     "address",
-				Usage:    "contract address where the register is located",
-				Required: true,
+				Name:  "privKey",
+				Usage: "account private key in hex which pay fee for register resolver",
 			},
 			&cli.StringFlag{
-				Name:     "account",
-				Usage:    "account that will pay fee for adding resolver to registry",
-				Required: true,
-			},
-			// TODO PrivateKey this volume cant be a command line parameter.
-			// I think need move configura private key from file in future.
-			&cli.StringFlag{
-				Name:     "privKey",
-				Usage:    "account private key in hex which pay fee for register resolver",
-				Required: true,
+				Name:  "ip",
+				Usage: "this ip will set for resolver node",
 			},
 			&cli.StringFlag{
-				Name:     "node.ip",
-				Usage:    "this ip will set for resolver node",
-				Required: true,
-			},
-			&cli.StringFlag{
-				Name:     "node.encodedPublicKey",
-				Required: true,
-				Usage:    "public key encoded in base64, will set for resolver node",
+				Name:  "configFile",
+				Usage: "Path to the configuration file",
 			},
 		},
 		Action: func(c *cli.Context) error {
@@ -145,21 +124,43 @@ func cliCommandRegistration() cli.Command {
 				Level: slog.LevelInfo,
 			})
 			logger := slog.New(loggerHandler)
+			cfg := &resolver.Config{}
 
-			contractAddress := c.String("address")
-			rawUrl := fmt.Sprintf("http://%s:%s", c.String("eth.addr"), c.String("eth.port"))
-			logger.Info(rawUrl)
-			regResolver, err := resolver.NewRegistrationResolver(logger, rawUrl, contractAddress)
+			// Try to load config file, if present
+			loadedCfg := loadConfigByPath(c.String("configFile"))
+			if loadedCfg != nil {
+				cfg = loadedCfg
+			}
+
+			// check if this param is not null and override
+			contractAddr := c.String("contract_address")
+			if contractAddr != "" {
+				cfg.ContractAddress = contractAddr
+			}
+
+			// check if this param is not null and override
+			rpc_url := c.String("rpc_url")
+			if rpc_url != "" {
+				cfg.RpcUrl = rpc_url
+			}
+
+			ip := c.String("ip")
+			if ip != "" {
+				cfg.Ip = ip
+			}
+
+			privKey := c.String("privKey")
+			if privKey != "" {
+				cfg.PrivateKey = privKey
+			}
+
+			regResolver, err := resolver.NewRegistrationResolver(logger, cfg)
 			if err != nil {
 				logger.Info("error when try create registration resolver", slog.Any("err", err.Error()))
 				return err
 			}
 
-			ip := c.String("node.ip")
-			account := c.String("account")
-			privateKey := c.String("privKey")
-			encodedPublicKey := c.String("node.encodedPublicKey")
-			txHash, err := regResolver.Register(context.Background(), account, privateKey, ip, encodedPublicKey)
+			txHash, err := regResolver.Register(context.Background())
 			if err != nil {
 				return err
 			}
@@ -168,4 +169,17 @@ func cliCommandRegistration() cli.Command {
 			return nil
 		},
 	}
+}
+
+func loadConfigByPath(configPath string) *resolver.Config {
+	if configPath != "" {
+		cfgFromFile, err := configs.LoadConfig[resolver.Config](configPath)
+		if err != nil {
+			slog.Error("Error opening config file", "err", err)
+			return nil
+		}
+		return cfgFromFile
+	}
+
+	return nil
 }

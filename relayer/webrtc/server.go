@@ -279,7 +279,7 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 								Message: errorMsg,
 							},
 						},
-						PublicKey: []byte(publicKey),
+						PublicKey: publicKey,
 					}
 					if sendErr := w.sendResponse(dc, respMessage); sendErr != nil {
 						w.logger.Error("failed to send error response", slog.Any("err", sendErr))
@@ -291,7 +291,7 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 					Result: &pb.OutgoingMessage_Response{
 						Response: response,
 					},
-					PublicKey: []byte(publicKey),
+					PublicKey: publicKey,
 				}
 
 				if err := w.sendResponse(dc, respMessage); err != nil {
@@ -302,7 +302,7 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 								Message: fmt.Sprintf("Failed to send response for publicKey %s: %v", publicKey, err),
 							},
 						},
-						PublicKey: []byte(publicKey),
+						PublicKey: publicKey,
 					}
 					if sendErr := w.sendResponse(dc, respMessage); sendErr != nil {
 						w.logger.Error("failed to send data channel error response", slog.Any("err", sendErr))

@@ -16,8 +16,10 @@ import (
 var (
 	// ErrResolverLookupFailed is returned when the registry client fails to resolve a public key.
 	ErrResolverLookupFailed = errors.New("resolver lookup failed")
-	// ErrResolverLookupFailed is returned when the registry client fails to resolve a public key.
+	// ErrGRPCExecutionFailed is returned when the grpc execution fails.
 	ErrGRPCExecutionFailed = errors.New("gRPC execution failed")
+	// ErrGRPCConnectionCloseFailed is returned when the grpc execution fails.
+	ErrGRPCConnectionCloseFailed = errors.New("gRPC connection close failed")
 )
 
 // Client wraps the gRPC connection and Execute service client.
@@ -45,7 +47,7 @@ func (c *Client) Execute(ctx context.Context, publicKey []byte, req *pb.Resolver
 	client := pb.NewExecuteClient(conn)
 	response, err := client.Execute(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("%w: publicKey %s: %v", ErrGRPCExecutionFailed, publicKey, err)
+		return nil, fmt.Errorf("%w: publicKey %s: %w", ErrGRPCExecutionFailed, publicKey, err)
 	}
 
 	return response, nil
@@ -64,7 +66,7 @@ func (c *Client) Close() error {
 	}
 
 	if len(closeErrs) > 0 {
-		return fmt.Errorf("multiple errors occurred during gRPC connection close: %v", closeErrs)
+		return fmt.Errorf("%w: multiple errors: %v", ErrGRPCConnectionCloseFailed, closeErrs)
 	}
 
 	return nil
@@ -73,7 +75,7 @@ func (c *Client) Close() error {
 func (c *Client) getConn(publicKey []byte) (*grpc.ClientConn, error) {
 	address, err := c.registryClient.GetResolver(publicKey)
 	if err != nil {
-		return nil, fmt.Errorf("%w: publicKey %s: %v", ErrResolverLookupFailed, publicKey, err)
+		return nil, fmt.Errorf("%w: publicKey %s: %w", ErrResolverLookupFailed, publicKey, err)
 	}
 
 	c.mu.Lock()

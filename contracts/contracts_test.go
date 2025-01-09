@@ -34,7 +34,7 @@ func TestDeployContract(t *testing.T) {
 
 func TestRegisterResolver(t *testing.T) {
 	ctx := context.Background()
-	resolverIP := "http://127.0.0.1:8081"
+	resolverIP := "127.0.0.1:8081"
 	rpcURL := "http://127.0.0.1:8545"
 	resolverPrivateKey := "5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
 

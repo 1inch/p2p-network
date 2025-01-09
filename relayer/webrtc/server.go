@@ -3,7 +3,6 @@ package webrtc
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,8 +10,9 @@ import (
 	"time"
 
 	pb "github.com/1inch/p2p-network/proto"
-
+	"github.com/1inch/p2p-network/relayer/grpc"
 	"github.com/pion/webrtc/v4"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -32,8 +32,7 @@ var (
 
 // GRPCClient defines the interface for a gRPC client.
 type GRPCClient interface {
-	Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.ResolverResponse, error)
-	ExecuteRequest(ctx context.Context, address string, req *pb.ResolverRequest) (*pb.ResolverResponse, error)
+	Execute(ctx context.Context, publicKey []byte, req *pb.ResolverRequest) (*pb.ResolverResponse, error)
 	Close() error
 }
 
@@ -57,15 +56,14 @@ type ICECandidate struct {
 
 // Server wraps the webrtc.Server.
 type Server struct {
-	logger         *slog.Logger
-	ICEServer      string
-	grpcClient     GRPCClient
-	registryClient RegistryClient
-	sdpRequests    <-chan SDPRequest
-	iceCandidates  <-chan ICECandidate
-	connections    map[string]*webrtc.PeerConnection
-	dataChannels   map[string]*webrtc.DataChannel
-	mu             sync.RWMutex
+	logger        *slog.Logger
+	ICEServer     string
+	grpcClient    GRPCClient
+	sdpRequests   <-chan SDPRequest
+	iceCandidates <-chan ICECandidate
+	connections   map[string]*webrtc.PeerConnection
+	dataChannels  map[string]*webrtc.DataChannel
+	mu            sync.RWMutex
 }
 
 // New initializes a new WebRTC server.
@@ -73,7 +71,6 @@ func New(
 	logger *slog.Logger,
 	iceServer string,
 	client GRPCClient,
-	registryClient RegistryClient,
 	sdpRequests <-chan SDPRequest,
 	iceICECandidates <-chan ICECandidate,
 ) (*Server, error) {
@@ -83,14 +80,13 @@ func New(
 	}
 
 	return &Server{
-		sdpRequests:    sdpRequests,
-		iceCandidates:  iceICECandidates,
-		ICEServer:      iceServer,
-		grpcClient:     client,
-		registryClient: registryClient,
-		connections:    make(map[string]*webrtc.PeerConnection),
-		dataChannels:   make(map[string]*webrtc.DataChannel),
-		logger:         logger,
+		sdpRequests:   sdpRequests,
+		iceCandidates: iceICECandidates,
+		ICEServer:     iceServer,
+		grpcClient:    client,
+		connections:   make(map[string]*webrtc.PeerConnection),
+		dataChannels:  make(map[string]*webrtc.DataChannel),
+		logger:        logger,
 	}, nil
 }
 
@@ -250,41 +246,85 @@ func (w *Server) GetAllConnections() []string {
 
 func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
-		w.logger.Debug("message received", slog.String("label", dc.Label()), slog.Any("msg", msg))
-
-		var message IncommingMessage
-		if err := json.Unmarshal(msg.Data, &message); err != nil {
-			w.logger.Error("failed to unmarshal message", slog.Any("err", err))
+		var message pb.IncomingMessage
+		if err := proto.Unmarshal(msg.Data, &message); err != nil {
+			respMessage := &pb.OutgoingMessage{
+				Result: &pb.OutgoingMessage_Error{
+					Error: &pb.Error{
+						Code:    pb.ErrorCode_ERR_INVALID_MESSAGE_FORMAT,
+						Message: fmt.Sprintf("failed to unmarshal protobuf message: %v", err),
+					},
+				},
+			}
+			if sendErr := w.sendResponse(dc, respMessage); sendErr != nil {
+				w.logger.Error("failed to send invalid message error response", slog.Any("err", sendErr))
+			}
 			return
 		}
 
+		var wg sync.WaitGroup
 		for _, publicKey := range message.PublicKeys {
-			address, err := w.registryClient.GetResolver(publicKey)
-			if err != nil {
-				w.logger.Error("failed to get resolver ip address", slog.Any("err", err))
-				return
-			}
+			wg.Add(1)
+			go func(publicKey []byte) {
+				defer wg.Done()
 
-			response, err := w.grpcClient.ExecuteRequest(context.Background(), address, message.Request)
-			if err != nil {
-				w.logger.Error("grpc execute call failed", slog.Any("err", err))
-				return
-			}
+				response, err := w.grpcClient.Execute(context.Background(), publicKey, message.Request)
+				if err != nil {
+					var errorCode, errorMsg = mapErrorToCodeAndMessage(err, publicKey)
 
-			respBytes, err := json.Marshal(OutcommingMessage{
-				Response:  response,
-				PublicKey: publicKey,
-			})
-			if err != nil {
-				w.logger.Error("failed to marshal response", slog.Any("err", err))
-				return
-			}
+					respMessage := &pb.OutgoingMessage{
+						Result: &pb.OutgoingMessage_Error{
+							Error: &pb.Error{
+								Code:    errorCode,
+								Message: errorMsg,
+							},
+						},
+						PublicKey: []byte(publicKey),
+					}
+					if sendErr := w.sendResponse(dc, respMessage); sendErr != nil {
+						w.logger.Error("failed to send error response", slog.Any("err", sendErr))
+					}
+					return
+				}
 
-			if err := dc.SendText(string(respBytes)); err != nil {
-				w.logger.Error("failed to send response", slog.Any("err", err))
-			}
+				respMessage := &pb.OutgoingMessage{
+					Result: &pb.OutgoingMessage_Response{
+						Response: response,
+					},
+					PublicKey: []byte(publicKey),
+				}
+
+				if err := w.sendResponse(dc, respMessage); err != nil {
+					respMessage := &pb.OutgoingMessage{
+						Result: &pb.OutgoingMessage_Error{
+							Error: &pb.Error{
+								Code:    pb.ErrorCode_ERR_DATA_CHANNEL_SEND_FAILED,
+								Message: fmt.Sprintf("Failed to send response for publicKey %s: %v", publicKey, err),
+							},
+						},
+						PublicKey: []byte(publicKey),
+					}
+					if sendErr := w.sendResponse(dc, respMessage); sendErr != nil {
+						w.logger.Error("failed to send data channel error response", slog.Any("err", sendErr))
+					}
+				}
+			}(publicKey)
 		}
+		wg.Wait()
 	})
+}
+
+func (w *Server) sendResponse(dc *webrtc.DataChannel, message *pb.OutgoingMessage) error {
+	respBytes, err := proto.Marshal(message)
+	if err != nil {
+		return fmt.Errorf("failed to marshal protobuf response: %w", err)
+	}
+
+	if err := dc.Send(respBytes); err != nil {
+		return fmt.Errorf("failed to send response: %w", err)
+	}
+
+	return nil
 }
 
 func (w *Server) handleCandidate(sessionID string, candidate webrtc.ICECandidate) error {
@@ -321,4 +361,17 @@ func (w *Server) cleanup() {
 	}
 	w.connections = make(map[string]*webrtc.PeerConnection)
 	w.dataChannels = make(map[string]*webrtc.DataChannel)
+
+	if err := w.grpcClient.Close(); err != nil {
+		w.logger.Error("failed to close gRPC client", slog.Any("err", err))
+	}
+}
+
+func mapErrorToCodeAndMessage(err error, publicKey []byte) (pb.ErrorCode, string) {
+	if errors.Is(err, grpc.ErrResolverLookupFailed) {
+		return pb.ErrorCode_ERR_RESOLVER_LOOKUP_FAILED, fmt.Sprintf("resolver lookup failed for publicKey %s: %v", publicKey, err)
+	} else if errors.Is(err, grpc.ErrGRPCExecutionFailed) {
+		return pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED, fmt.Sprintf("grpc execution failed for publicKey %s: %v", publicKey, err)
+	}
+	return pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED, fmt.Sprintf("unexpected error for publicKey %s: %v", publicKey, err)
 }

@@ -71,19 +71,6 @@ func TestPositiveCases(t *testing.T) {
 		},
 	}
 
-	registryClient, err := registry.Dial(context.Background(), &registry.Config{
-		DialURI:         dialURL,
-		PrivateKey:      privateKey,
-		ContractAddress: contractAddress,
-	})
-	assert.NoError(t, err, "Failed to create registry client")
-
-	privKey, err := crypto.HexToECDSA(resolverPrivateKey)
-	assert.NoError(t, err, "invalid private key")
-	resolverPublicKeyBytes := crypto.CompressPubkey(&privKey.PublicKey)
-
-	registryClient.RegisterResolver(context.Background(), grpcEndpointToResolver, resolverPublicKeyBytes)
-
 	for _, testCase := range testCases {
 		t.Run(testCase.Name, func(t *testing.T) {
 			positiveTestWorkFlow(t, logger, &testCase)

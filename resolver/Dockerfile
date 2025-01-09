@@ -1,15 +1,14 @@
 FROM golang:1.23-alpine as builder
 
-RUN apk add --no-cache make
+RUN apk add --no-cache make bash
 
 WORKDIR /app
 
-COPY . .
+COPY ./../ .
 
 RUN go mod download
 
-ENTRYPOINT ["make", "build_resolver"]
-
+RUN make build_resolver
 
 FROM alpine:3.21 as resolver
 WORKDIR /app

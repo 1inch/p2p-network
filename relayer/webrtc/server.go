@@ -299,7 +299,7 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 						Result: &pb.OutgoingMessage_Error{
 							Error: &pb.Error{
 								Code:    pb.ErrorCode_ERR_DATA_CHANNEL_SEND_FAILED,
-								Message: fmt.Sprintf("Failed to send response for publicKey %s: %v", publicKey, err),
+								Message: fmt.Sprintf("Failed to send response: %v", err),
 							},
 						},
 						PublicKey: publicKey,

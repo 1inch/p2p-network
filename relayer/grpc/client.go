@@ -3,6 +3,7 @@ package grpc
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
@@ -47,7 +48,7 @@ func (c *Client) Execute(ctx context.Context, publicKey []byte, req *pb.Resolver
 	client := pb.NewExecuteClient(conn)
 	response, err := client.Execute(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("%w: publicKey %s: %w", ErrGRPCExecutionFailed, publicKey, err)
+		return nil, fmt.Errorf("%w: publicKey %s: %w", ErrGRPCExecutionFailed, hex.EncodeToString(publicKey), err)
 	}
 
 	return response, nil
@@ -75,7 +76,7 @@ func (c *Client) Close() error {
 func (c *Client) getConn(publicKey []byte) (*grpc.ClientConn, error) {
 	address, err := c.registryClient.GetResolver(publicKey)
 	if err != nil {
-		return nil, fmt.Errorf("%w: publicKey %s: %w", ErrResolverLookupFailed, publicKey, err)
+		return nil, fmt.Errorf("%w: publicKey %s: %w", ErrResolverLookupFailed, hex.EncodeToString(publicKey), err)
 	}
 
 	c.mu.Lock()

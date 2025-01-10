@@ -38,7 +38,7 @@ contract NodeRegistry {
     /// @return ip The IP address of the relayer node
     /// @return publicKeys An array of all resolver public keys
     function getRelayer() external view returns (string memory ip, bytes[] memory publicKeys) {
-        require(bytes(relayerIP).length > 0, "No relayer registered");
+        //require(bytes(relayerIP).length > 0, "No relayer registered");
         ip = relayerIP;
         publicKeys = resolverKeys;
     }

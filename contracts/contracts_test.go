@@ -35,6 +35,7 @@ func TestDeployContract(t *testing.T) {
 func TestRegisterResolver(t *testing.T) {
 	ctx := context.Background()
 	resolverIP := "127.0.0.1:8001"
+	relayerIP := "127.0.0.1:8880"
 	rpcURL := "http://127.0.0.1:8545"
 	resolverPrivateKey := "5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
 
@@ -52,11 +53,15 @@ func TestRegisterResolver(t *testing.T) {
 	require.NoError(t, err, "failed to connect to %s", rpcURL)
 
 	err = client.RegisterResolver(ctx, resolverIP, resolverPublicKeyBytes)
-	require.NoError(t, err, "contract deployment failed")
+	require.NoError(t, err, "resolver registration failed")
 
 	ip, err := client.Registry.GetResolver(&bind.CallOpts{}, resolverPublicKeyBytes)
-	require.NoError(t, err, "contract get relayer failed")
+	require.NoError(t, err, "contract get resolver failed")
 
 	require.Equal(t, resolverIP, ip)
-	t.Log("resolver successful registered")
+
+	err = client.RegisterRelayer(ctx, relayerIP)
+	require.NoError(t, err, "relayer registration failed")
+
+	t.Log("resolver successfully registered")
 }

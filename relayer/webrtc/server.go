@@ -3,6 +3,7 @@ package webrtc
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -368,10 +369,11 @@ func (w *Server) cleanup() {
 }
 
 func mapErrorToCodeAndMessage(err error, publicKey []byte) (pb.ErrorCode, string) {
+	encodedPublicKey := hex.EncodeToString(publicKey)
 	if errors.Is(err, grpc.ErrResolverLookupFailed) {
-		return pb.ErrorCode_ERR_RESOLVER_LOOKUP_FAILED, fmt.Sprintf("resolver lookup failed for publicKey %s: %v", publicKey, err)
+		return pb.ErrorCode_ERR_RESOLVER_LOOKUP_FAILED, fmt.Sprintf("resolver lookup failed for publicKey %s: %v", encodedPublicKey, err)
 	} else if errors.Is(err, grpc.ErrGRPCExecutionFailed) {
-		return pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED, fmt.Sprintf("grpc execution failed for publicKey %s: %v", publicKey, err)
+		return pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED, fmt.Sprintf("grpc execution failed for publicKey %s: %v", encodedPublicKey, err)
 	}
-	return pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED, fmt.Sprintf("unexpected error for publicKey %s: %v", publicKey, err)
+	return pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED, fmt.Sprintf("unexpected error for publicKey %s: %v", encodedPublicKey, err)
 }

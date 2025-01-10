@@ -41,6 +41,12 @@ func main() {
 						Value: "default",
 						Usage: "Supported API (default,infura)",
 					},
+
+					&cli.StringFlag{
+						Name:  "privateKey",
+						Value: "",
+						Usage: "Secp256k1 private key in hex",
+					},
 					&cli.StringFlag{
 						Name:   "infuraKey",
 						Value:  "",
@@ -65,6 +71,10 @@ func main() {
 					grpcEndpoint := c.String("grpc_endpoint")
 					if grpcEndpoint != "" {
 						cfg.GrpcEndpoint = grpcEndpoint
+					}
+					privateKey := c.String("privateKey")
+					if len(privateKey) > 0 {
+						cfg.PrivateKey = privateKey
 					}
 					// Override config file value for apis
 					api := c.String("api")

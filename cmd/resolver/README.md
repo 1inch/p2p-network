@@ -3,7 +3,7 @@ Resolver application serves as a lowest-level endpoint in the p2p-network archit
 
 It processes requests received from the relayer and forwards them to the API(s) that it wraps.
 
-Currently 2 APIs are support: a mock (default) one, and an external Infura API.
+Currently 2 APIs are supported: a mock (default) one, and an external Infura API.
 ```mermaid
 ---
 title: Resolver architecture

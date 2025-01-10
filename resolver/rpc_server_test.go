@@ -139,7 +139,7 @@ func (s *ResolverTestSuite) TestExecuteEncrypted() {
 	s.Require().NoError(err)
 	relayerPubKey := relayerKey.(*ecies.PrivateKey).PublicKey.Bytes(true)
 
-	encryptedPayload, err := encryption.EncryptV2(s.getWalletBalancePayloadOk(), s.resolverPublicKey)
+	encryptedPayload, err := encryption.Encrypt(s.getWalletBalancePayloadOk(), s.resolverPublicKey)
 	s.Require().NoError(err)
 
 	req := &pb.ResolverRequest{Id: "1", Payload: encryptedPayload, Encrypted: true, PublicKey: relayerPubKey}

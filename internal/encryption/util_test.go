@@ -1,60 +1,28 @@
 package encryption
 
 import (
-	"crypto"
 	"testing"
 
+	ecies "github.com/ecies/go/v2"
 	"github.com/stretchr/testify/suite"
 )
 
 type EncryptionTestSuite struct {
 	suite.Suite
 
-	relayerSecp256k1     crypto.PrivateKey
-	resolverSecp256k1    crypto.PrivateKey
-	relayerSecp256k1PEM  []byte
-	resolverSecp256k1PEM []byte
-
-	relayerRsa     crypto.PrivateKey
-	resolverRsa    crypto.PrivateKey
-	relayerRsaPEM  []byte
-	resolverRsaPEM []byte
+	relayer  *ecies.PrivateKey
+	resolver *ecies.PrivateKey
 }
 
 func (s *EncryptionTestSuite) SetupTest() {
-	// Secp256k1 keys
-	relayerSecp256k1, err := GenerateKeyPair(Secp256k1)
+	//  keys
+	relayer, err := GenerateKeyPair()
 	s.Require().NoError(err)
-	s.relayerSecp256k1 = relayerSecp256k1
+	s.relayer = relayer
 
-	relayerSecp256k1PEM, err := ToPEM(relayerSecp256k1)
+	resolver, err := GenerateKeyPair()
 	s.Require().NoError(err)
-	s.relayerSecp256k1PEM = relayerSecp256k1PEM
-
-	resolverSecp256k1, err := GenerateKeyPair(Secp256k1)
-	s.Require().NoError(err)
-	s.resolverSecp256k1 = resolverSecp256k1
-
-	resolverSecp256k1PEM, err := ToPEM(resolverSecp256k1)
-	s.Require().NoError(err)
-	s.resolverSecp256k1PEM = resolverSecp256k1PEM
-
-	// RSA keys
-	relayerRsa, err := GenerateKeyPair(RSA4096)
-	s.Require().NoError(err)
-	s.relayerRsa = relayerRsa
-
-	relayerRsaPEM, err := ToPEM(relayerRsa)
-	s.Require().NoError(err)
-	s.relayerRsaPEM = relayerRsaPEM
-
-	resolverRsa, err := GenerateKeyPair(RSA4096)
-	s.Require().NoError(err)
-	s.resolverRsa = resolverRsa
-
-	resolverRsaPEM, err := ToPEM(resolverRsa)
-	s.Require().NoError(err)
-	s.resolverRsaPEM = resolverRsaPEM
+	s.resolver = resolver
 }
 
 func (s *EncryptionTestSuite) TearDownTest() {
@@ -67,32 +35,17 @@ func TestEncryptionTestSuite(t *testing.T) {
 func (s *EncryptionTestSuite) TestEncryption() {
 	payload := []byte("test payload")
 
-	// Secp256k1
-	encrypted, err := Encrypt(payload, s.resolverSecp256k1PEM)
+	encrypted, err := Encrypt(payload, s.resolver.PublicKey)
 
 	s.Require().NoError(err)
 
-	decrypted, err := Decrypt(encrypted, s.resolverSecp256k1)
+	decrypted, err := Decrypt(encrypted, s.resolver)
 	s.Require().NoError(err)
 
-	encrypted, err = Encrypt(decrypted, s.relayerSecp256k1PEM)
+	encrypted, err = Encrypt(decrypted, s.relayer.PublicKey)
 	s.Require().NoError(err)
 
-	decrypted, err = Decrypt(encrypted, s.relayerSecp256k1)
-	s.Require().NoError(err)
-	s.Require().Equal(payload, decrypted)
-
-	// RSA
-	encrypted, err = Encrypt(payload, s.resolverRsaPEM)
-	s.Require().NoError(err)
-
-	decrypted, err = Decrypt(encrypted, s.resolverRsa)
-	s.Require().NoError(err)
-
-	encrypted, err = Encrypt(decrypted, s.relayerRsaPEM)
-	s.Require().NoError(err)
-
-	decrypted, err = Decrypt(encrypted, s.relayerRsa)
+	decrypted, err = Decrypt(encrypted, s.relayer)
 	s.Require().NoError(err)
 	s.Require().Equal(payload, decrypted)
 }

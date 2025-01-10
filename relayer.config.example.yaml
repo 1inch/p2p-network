@@ -8,12 +8,14 @@ discovery:
 webrtc:
   use_trickle_ice: false
   ice_servers:
-
+    - url: stun:stun1.l.google.com:19302
+    - url: turn:global.relay.metered.ca:80
+      username: 07627794187c15e0a64bccdb
+      password: UfypRsp+us/bRnp+      
+    - url: turn:global.relay.metered.ca:443
+      username: 07627794187c15e0a64bccdb
+      password: UfypRsp+us/bRnp+     
   retry:
-    enabled: true
+    enabled: false
     count: 5
     interval: 1s
-  port:
-    enabled: true
-    min: 15000
-    max: 15500

@@ -3,7 +3,6 @@ package resolver
 
 import (
 	"context"
-	"crypto"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -27,7 +26,7 @@ var (
 type Server struct {
 	pb.UnimplementedExecuteServer
 
-	privateKey crypto.PrivateKey
+	privateKey *ecies.PrivateKey
 
 	logger *slog.Logger
 
@@ -56,7 +55,7 @@ func newServer(cfg *Config) (*Server, error) {
 		return nil, errNoHandlerApiInConfig
 	}
 
-	var privKey crypto.PrivateKey
+	var privKey *ecies.PrivateKey
 	if len(cfg.PrivateKey) > 0 {
 		privKeyBytes, err := hex.DecodeString(cfg.PrivateKey)
 		if err != nil {
@@ -65,7 +64,7 @@ func newServer(cfg *Config) (*Server, error) {
 		}
 		privKey = ecies.NewPrivateKeyFromBytes(privKeyBytes)
 	} else {
-		privKeyGenerated, err := encryption.GenerateKeyPair(encryption.Secp256k1)
+		privKeyGenerated, err := encryption.GenerateKeyPair()
 
 		if err != nil {
 			return nil, err
@@ -109,7 +108,7 @@ func (s *Server) Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.Reso
 			return nil, s.formatGrpcError(response, err)
 		}
 
-		resp, err = encryption.EncryptV2(resp, pubKey)
+		resp, err = encryption.Encrypt(resp, pubKey)
 		if err != nil {
 			return nil, s.formatGrpcError(response, err)
 		}

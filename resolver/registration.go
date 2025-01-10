@@ -39,7 +39,7 @@ func NewRegistrationResolver(logger *slog.Logger, cfg *Config) (*RegistrationRes
 	}
 
 	rawUrl := fmt.Sprintf("http://%s", cfg.RpcUrl)
-	registryCfg := registry.Config{
+	registryCfg := &registry.Config{
 		DialURI:         rawUrl,
 		PrivateKey:      cfg.PrivateKey,
 		ContractAddress: cfg.ContractAddress,

@@ -15,6 +15,8 @@ func SDPHandler(logger *slog.Logger, sdpRequests chan SDPRequest) http.HandlerFu
 			SessionID string                    `json:"session_id"`
 			Offer     webrtc.SessionDescription `json:"offer"`
 		}
+		logger.Info("sdp request")
+
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
@@ -38,6 +40,7 @@ func SDPHandler(logger *slog.Logger, sdpRequests chan SDPRequest) http.HandlerFu
 		}{Answer: *answer}
 
 		w.Header().Set("Content-Type", "application/json")
+
 		err := json.NewEncoder(w).Encode(resp)
 		if err != nil {
 			http.Error(w, "failed to encode response", http.StatusInternalServerError)
@@ -47,22 +50,27 @@ func SDPHandler(logger *slog.Logger, sdpRequests chan SDPRequest) http.HandlerFu
 }
 
 // CandidateHandler handles ICECandidate request.
-func CandidateHandler(log *slog.Logger, candiadates chan ICECandidate) http.HandlerFunc {
+func CandidateHandler(log *slog.Logger, candidates chan ICECandidate) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
-			SessionID string              `json:"session_id"`
-			Candidate webrtc.ICECandidate `json:"candidate"`
+			SessionID string                  `json:"session_id"`
+			Candidate webrtc.ICECandidateInit `json:"candidate"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			log.Error("candidate parse error", "err", err)
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 
-		candiadates <- ICECandidate{
+		log.Info("### CandidateHandler", "sessionID", req.SessionID)
+		log.Info("### CandidateHandler", "candidate", req.Candidate)
+
+		candidates <- ICECandidate{
 			SessionID: req.SessionID,
 			Candidate: req.Candidate,
 		}
 
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.WriteHeader(http.StatusAccepted)
 	}
 }

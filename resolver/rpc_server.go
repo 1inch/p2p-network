@@ -8,6 +8,7 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"errors"
+	"io/ioutil"
 	"log/slog"
 	"os"
 
@@ -26,6 +27,9 @@ const (
 var (
 	errWrongRequest = errors.New("wrong request body")
 	errEmptyParam   = errors.New("empty parameter")
+	errEmptyReq     = errors.New("empty request")
+	errEmptyId      = errors.New("empty request id")
+	errEmptyPayload = errors.New("empty request payload")
 )
 
 // Server represents gRPC server.
@@ -74,13 +78,18 @@ func newServer(cfg *Config) (*Server, error) {
 	if len(cfg.PrivateKey) > 0 {
 		privKey = cfg.PrivateKey
 	} else {
-		privKeyGenerated, err := encryption.GenerateKeyPair(encryption.Secp256k1)
+		privKeyGenerated, err := encryption.GenerateKeyPair(encryption.RSA4096)
 
 		if err != nil {
 			return nil, err
 		}
 		privKey = privKeyGenerated
 	}
+	pem, err := encryption.ToPEM(privKey)
+	if err != nil {
+		logger.Error("Could not create PEM", err)
+	}
+	ioutil.WriteFile("resolver.pem", pem, 0644)
 	return &Server{privateKey: privKey, logger: logger.With("module", "server"), handler: handler}, nil
 }
 
@@ -94,11 +103,13 @@ func (s *Server) Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.Reso
 	}
 
 	if err != nil {
+		s.logger.Error("###validation failed", err)
 		return nil, s.formatGrpcError(response, err)
 	}
 
 	jsonReq, err := s.getJsonRequest(req)
 	if err != nil {
+		s.logger.Error("###getJsonRequest failed", err)
 		return nil, s.formatGrpcError(response, err)
 	}
 
@@ -110,6 +121,7 @@ func (s *Server) Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.Reso
 
 	if req.Encrypted {
 		resp, err = encryption.Encrypt(resp, req.PublicKey)
+		slog.Info("### after request encryption", "error", err)
 		if err != nil {
 			return nil, s.formatGrpcError(response, err)
 		}
@@ -122,15 +134,15 @@ func (s *Server) Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.Reso
 func (s *Server) validateResolverRequest(req *pb.ResolverRequest) error {
 	// return after this check, because maybe nil pointer exception in next checks
 	if req == nil {
-		return errEmptyParam
+		return errEmptyReq
 	}
 
 	if req.Id == "" {
-		return errEmptyParam
+		return errEmptyId
 	}
 
 	if len(req.Payload) == 0 {
-		return errEmptyParam
+		return errEmptyPayload
 	}
 
 	return nil

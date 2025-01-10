@@ -1,0 +1,18 @@
+{
+  "devDependencies": {
+    "@bufbuild/buf": "^1.49.0",
+    "@bufbuild/protoc-gen-es": "^2.2.3",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.2.3",
+    "@roamhq/wrtc": "^0.8.0",
+    "axios": "^1.7.9",
+    "eciesjs": "^0.4.13",
+    "express": "^4.21.2",
+    "nodemon": "^3.1.9",
+    "protobufjs": "^7.4.0"
+  }
+}

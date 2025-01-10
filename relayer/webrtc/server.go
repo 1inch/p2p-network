@@ -46,7 +46,7 @@ type SDPRequest struct {
 // ICECandidate represents ICECandidate request.
 type ICECandidate struct {
 	SessionID string
-	Candidate webrtc.ICECandidate
+	Candidate webrtc.ICECandidateInit
 }
 
 // Server wraps the webrtc.Server.
@@ -250,6 +250,7 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 			return
 		}
 
+		w.logger.Info("###req received", slog.Any("req", req))
 		response, err := w.grpcClient.Execute(context.Background(), &req)
 		if err != nil {
 			w.logger.Error("grpc execute call failed", slog.Any("err", err))
@@ -268,8 +269,8 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 	})
 }
 
-func (w *Server) handleCandidate(sessionID string, candidate webrtc.ICECandidate) error {
-	w.logger.Debug("handled ice candidate", slog.String("sessionID", sessionID), slog.String("candidate", candidate.String()))
+func (w *Server) handleCandidate(sessionID string, candidate webrtc.ICECandidateInit) error {
+	w.logger.Debug("handled ice candidate", slog.String("sessionID", sessionID), slog.String("candidate", candidate.Candidate))
 
 	w.mu.RLock()
 	conn, ok := w.connections[sessionID]
@@ -279,7 +280,7 @@ func (w *Server) handleCandidate(sessionID string, candidate webrtc.ICECandidate
 		return fmt.Errorf("%w: session_id=%s", ErrConnectionNotFound, sessionID)
 	}
 
-	err := conn.AddICECandidate(candidate.ToJSON())
+	err := conn.AddICECandidate(candidate)
 	if err != nil {
 		return fmt.Errorf("failed to add ICE candidate: %w", err)
 	}

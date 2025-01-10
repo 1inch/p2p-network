@@ -25,6 +25,22 @@ type Relayer struct {
 	HTTPServer   *httpapi.Server
 }
 
+func CORS(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Access-Control-Allow-Origin", "*")
+		w.Header().Add("Access-Control-Allow-Credentials", "true")
+		w.Header().Add("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		w.Header().Add("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+
+		if r.Method == "OPTIONS" {
+			http.Error(w, "No Content", http.StatusNoContent)
+			return
+		}
+
+		next(w, r)
+	}
+}
+
 // New initializes a new Relayer instance with provided configuration and logger.
 func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 	sdpRequests := make(chan webrtc.SDPRequest)
@@ -38,8 +54,8 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 			return nil, err
 		}
 		mux := http.NewServeMux()
-		mux.HandleFunc("POST /sdp", webrtc.SDPHandler(logger, sdpRequests))
-		mux.HandleFunc("POST /candidate", webrtc.CandidateHandler(logger, iceCandidates))
+		mux.HandleFunc("/sdp", CORS(webrtc.SDPHandler(logger, sdpRequests)))
+		mux.HandleFunc("/candidate", CORS(webrtc.CandidateHandler(logger, iceCandidates)))
 		mux.HandleFunc("GET /relayer", func(w http.ResponseWriter, r *http.Request) {
 			client, err := registry.Dial(r.Context(), registry.Config{
 				DialURI:         cfg.BlockchainRPCAddress,

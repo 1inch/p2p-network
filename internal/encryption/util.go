@@ -10,6 +10,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"log/slog"
 
 	ecies "github.com/ecies/go/v2"
 )
@@ -44,6 +45,7 @@ func Encrypt(payload []byte, pemBytes []byte) ([]byte, error) {
 	}
 	switch v := pub.(type) {
 	case *ecies.PublicKey:
+		slog.Info("### encrypt ecies")
 		return ecies.Encrypt(v, payload)
 	case *rsa.PublicKey:
 		return rsa.EncryptOAEP(sha256.New(), rand.Reader, v, payload, nil)
@@ -55,11 +57,13 @@ func Encrypt(payload []byte, pemBytes []byte) ([]byte, error) {
 // FromPEM extracts public key from PEM
 func FromPEM(pemBytes []byte) (crypto.PublicKey, error) {
 	decodedKey, _ := pem.Decode(pemBytes)
+	slog.Info("### FromPEM", decodedKey.Type)
 	switch decodedKey.Type {
 	case Secp256k1:
+		slog.Info("Recover ecies key")
 		return ecies.NewPublicKeyFromBytes(decodedKey.Bytes)
 	case RSA4096:
-		return x509.ParsePKCS1PublicKey(decodedKey.Bytes)
+		return x509.ParsePKIXPublicKey(decodedKey.Bytes)
 	default:
 		return nil, ErrUnknownType
 	}
@@ -75,7 +79,7 @@ func ToPEM(priv crypto.PrivateKey) ([]byte, error) {
 		keyBytes = v.PublicKey.Bytes(false)
 	case *rsa.PrivateKey:
 		keyType = RSA4096
-		keyBytes = x509.MarshalPKCS1PublicKey(&v.PublicKey)
+		keyBytes, _ = x509.MarshalPKIXPublicKey(&v.PublicKey)
 	}
 	var buf bytes.Buffer
 	b := &pem.Block{Type: keyType, Bytes: keyBytes}

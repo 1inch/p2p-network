@@ -1,15 +1,14 @@
 FROM golang:1.23-alpine as builder
 
-RUN apk add --no-cache make
+RUN apk add --no-cache make bash
 
 WORKDIR /app
 
-COPY . .
+COPY ./../ .
 
 RUN go mod download
 
-ENTRYPOINT ["make", "build_relayer"]
-
+RUN make build_relayer
 
 FROM alpine:3.21 as relayer
 WORKDIR /app

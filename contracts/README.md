@@ -19,7 +19,13 @@
    Launch the local Ethereum node using Anvil:
 
    ```bash
-   make start_anvil
+   make start-anvil
+   ```
+
+   To stop:
+
+   ```bash
+   make stop-anvil
    ```
       ```
 

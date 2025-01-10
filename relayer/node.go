@@ -13,7 +13,6 @@ import (
 	"github.com/1inch/p2p-network/relayer/grpc"
 	"github.com/1inch/p2p-network/relayer/httpapi"
 	"github.com/1inch/p2p-network/relayer/webrtc"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -41,7 +40,7 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 		mux.HandleFunc("POST /sdp", webrtc.SDPHandler(logger, sdpRequests))
 		mux.HandleFunc("POST /candidate", webrtc.CandidateHandler(logger, iceCandidates))
 		mux.HandleFunc("GET /relayer", func(w http.ResponseWriter, r *http.Request) {
-			client, err := registry.Dial(r.Context(), registry.Config{
+			client, err := registry.Dial(r.Context(), &registry.Config{
 				DialURI:         cfg.BlockchainRPCAddress,
 				PrivateKey:      cfg.PrivateKey,
 				ContractAddress: cfg.ContractAddress,
@@ -52,7 +51,7 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 			}
 			defer client.Close()
 
-			relayer, err := client.Registry.GetRelayer(&bind.CallOpts{})
+			ip, resolvers, err := client.GetRelayer()
 			if err != nil {
 				http.Error(w, "failed to get closest relayer node", http.StatusInternalServerError)
 				return
@@ -61,7 +60,7 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 			resp := struct {
 				IPAddress string   `json:"ip_address"`
 				Resolvers [][]byte `json:"resolvers"`
-			}{IPAddress: relayer.Ip, Resolvers: relayer.PublicKeys}
+			}{IPAddress: ip, Resolvers: resolvers}
 
 			w.Header().Set("Content-Type", "application/json")
 			err = json.NewEncoder(w).Encode(resp)
@@ -77,12 +76,22 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 	{
 		// setup webrtc listener.
 		var err error
+		ctx := context.Background()
 		grpcClient, err := grpc.New(cfg.GRPCServerAddress)
 		if err != nil {
 			logger.Error("failed to initialize grpc client", slog.Any("err", err))
 			return nil, err
 		}
-		werbrtcServer, err = webrtc.New(logger.WithGroup("webrtc"), cfg.WebRTCICEServer, grpcClient, sdpRequests, iceCandidates)
+		registryClient, err := registry.Dial(ctx, &registry.Config{
+			DialURI:         cfg.BlockchainRPCAddress,
+			PrivateKey:      cfg.PrivateKey,
+			ContractAddress: cfg.ContractAddress,
+		})
+		if err != nil {
+			logger.Error("failed to initialize registry client", slog.Any("err", err))
+			return nil, err
+		}
+		werbrtcServer, err = webrtc.New(logger.WithGroup("webrtc"), cfg.WebRTCICEServer, grpcClient, registryClient, sdpRequests, iceCandidates)
 		if err != nil {
 			logger.Error("failed to create webrtc server", slog.String("iceserver", cfg.WebRTCICEServer), slog.Any("err", err))
 			return nil, err
@@ -148,7 +157,7 @@ func (r *Relayer) Run(ctx context.Context) error {
 }
 
 func (r *Relayer) registerRelayer(ctx context.Context) error {
-	client, err := registry.Dial(ctx, registry.Config{
+	client, err := registry.Dial(ctx, &registry.Config{
 		DialURI:         r.Config.BlockchainRPCAddress,
 		PrivateKey:      r.Config.PrivateKey,
 		ContractAddress: r.Config.ContractAddress,
@@ -158,16 +167,9 @@ func (r *Relayer) registerRelayer(ctx context.Context) error {
 	}
 	defer client.Close()
 
-	tx, err := client.Registry.RegisterRelayer(client.Auth, r.Config.HTTPEndpoint)
-	if err != nil {
+	if err = client.RegisterRelayer(ctx, r.Config.HTTPEndpoint); err != nil {
 		return fmt.Errorf("failed to register relayer: %w", err)
 	}
-
-	if err := client.WaitForTx(ctx, tx.Hash()); err != nil {
-		return fmt.Errorf("wait for transaction error: %w", err)
-	}
-
-	r.Logger.Debug("successfully sent register relayer tx", slog.String("tx_hash", tx.Hash().String()))
 
 	return nil
 }

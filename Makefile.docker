@@ -1,8 +1,5 @@
 # Makefile Variables.
-include config.mk
-
-# Makefile Variables.
-include Makefile.docker
+include docker.mk
 
 # Docker's BuildKit feature.
 export DOCKER_BUILDKIT=1

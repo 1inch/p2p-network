@@ -13,7 +13,7 @@ LATEST_COMMIT     := $$(git rev-parse --short HEAD)
 RESOLVER_DOCKERFILE := ./resolver/Dockerfile
 RELAYER_DOCKERFILE := ./relayer/Dockerfile
 # Image names.
-RESOLVER_IMAGE_NAME := 1inch-signer
+RESOLVER_IMAGE_NAME := 1inch-resolver
 RELAYER_IMAGE_NAME := 1inch-relayer
 
 IMAGE_RESOLVER_BACKUP = $(REGISTRY_HOST)/$(RESOLVER_IMAGE_NAME)$(ENVIRONMENT):$(CURRENT_DATE_TIME)-$(LATEST_COMMIT)

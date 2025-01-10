@@ -1,5 +1,5 @@
 # Makefile Variables.
-include config.mk
+include docker.mk
 
 # Makefile Variables.
 include Makefile.docker

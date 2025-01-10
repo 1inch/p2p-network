@@ -2,7 +2,7 @@
 include config.mk
 
 # Makefile Variables.
-include Makefile.runeskey
+include Makefile.docker
 
 # Docker's BuildKit feature.
 export DOCKER_BUILDKIT=1

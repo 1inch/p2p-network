@@ -74,16 +74,16 @@ func (c *Client) Close() error {
 }
 
 func (c *Client) getConn(publicKey []byte) (*grpc.ClientConn, error) {
-	address, err := c.registryClient.GetResolver(publicKey)
-	if err != nil {
-		return nil, fmt.Errorf("%w: publicKey %s: %w", ErrResolverLookupFailed, hex.EncodeToString(publicKey), err)
-	}
-
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if conn, exists := c.conns[string(publicKey)]; exists {
 		return conn, nil
+	}
+
+	address, err := c.registryClient.GetResolver(publicKey)
+	if err != nil {
+		return nil, fmt.Errorf("%w: publicKey %s: %w", ErrResolverLookupFailed, hex.EncodeToString(publicKey), err)
 	}
 
 	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))

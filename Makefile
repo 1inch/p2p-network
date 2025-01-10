@@ -93,7 +93,7 @@ start-anvil:
 .PHONY: stop-anvil
 stop-anvil:
 	@echo "Stopping Anvil..."
-	@pids=`ps aux | grep '[a]nvil' | awk '{print $$2}'`; \
+	@pids=`ps aux | grep 'anvil' | awk '{print $$2}'`; \
 	if [ -n "$$pids" ]; then \
 		echo "Found Anvil PIDs: $$pids"; \
 		echo "$$pids" | xargs kill -9 && echo "Anvil processes killed."; \

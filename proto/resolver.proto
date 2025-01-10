@@ -3,36 +3,6 @@ syntax = "proto3";
 option go_package = ".";
 package proto;
 
-// Enum to represent standardized error codes.
-enum ErrorCode {
-  ERR_INVALID_MESSAGE_FORMAT = 0;    // Error in message format.
-  ERR_RESOLVER_LOOKUP_FAILED = 1;    // Failed to resolve address for public key.
-  ERR_GRPC_EXECUTION_FAILED = 2;     // gRPC execution failure.
-  ERR_RESPONSE_SERIALIZATION_FAILED = 3; // Failed to serialize the response.
-  ERR_DATA_CHANNEL_SEND_FAILED = 4;  // Failed to send the response via the data channel.
-}
-
-// Represents a standard error structure.
-message Error {
-  ErrorCode code = 1;
-  string message = 2;
-}
-
-// IncomingMessage represents the message received via WebRTC data channel.
-message IncomingMessage {
-  repeated bytes publicKeys = 1;
-  ResolverRequest request = 2;
-}
-
-// OutgoingMessage represents the response message to be sent via WebRTC data channel.
-message OutgoingMessage {
-  oneof result {
-    ResolverResponse response = 1;
-    Error error = 2;
-  }
-  bytes publicKey = 3;
-}
-
 message ResolverRequest {
   string id = 1;
   bytes payload = 2;

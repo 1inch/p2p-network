@@ -3,7 +3,6 @@ package webrtc
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -271,7 +270,7 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 
 				response, err := w.grpcClient.Execute(context.Background(), publicKey, message.Request)
 				if err != nil {
-					var errorCode, errorMsg = mapErrorToCodeAndMessage(err, publicKey)
+					var errorCode, errorMsg = mapErrorToCodeAndMessage(err)
 
 					respMessage := &pb.OutgoingMessage{
 						Result: &pb.OutgoingMessage_Error{
@@ -368,12 +367,11 @@ func (w *Server) cleanup() {
 	}
 }
 
-func mapErrorToCodeAndMessage(err error, publicKey []byte) (pb.ErrorCode, string) {
-	encodedPublicKey := hex.EncodeToString(publicKey)
+func mapErrorToCodeAndMessage(err error) (pb.ErrorCode, string) {
 	if errors.Is(err, grpc.ErrResolverLookupFailed) {
-		return pb.ErrorCode_ERR_RESOLVER_LOOKUP_FAILED, fmt.Sprintf("resolver lookup failed for publicKey %s: %s", encodedPublicKey, err.Error())
+		return pb.ErrorCode_ERR_RESOLVER_LOOKUP_FAILED, fmt.Sprintf("resolver lookup failed: %s", err.Error())
 	} else if errors.Is(err, grpc.ErrGRPCExecutionFailed) {
-		return pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED, fmt.Sprintf("grpc execution failed for publicKey %s: %s", encodedPublicKey, err.Error())
+		return pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED, fmt.Sprintf("grpc execution failed: %s", err.Error())
 	}
-	return pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED, fmt.Sprintf("unexpected error for publicKey %s: %s", encodedPublicKey, err.Error())
+	return pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED, fmt.Sprintf("unexpected error: %s", err.Error())
 }

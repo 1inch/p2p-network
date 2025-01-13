@@ -10,6 +10,8 @@ import (
 
 	pb "github.com/1inch/p2p-network/proto"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	grpchealth "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 )
 
@@ -17,9 +19,12 @@ var errNoHandlerApiInConfig = errors.New("no handler api in config")
 
 func setupRpcServer(listener net.Listener, server *Server, opts ...grpc.ServerOption) *grpc.Server {
 	grpcServer := grpc.NewServer(opts...)
+	healthServer := health.NewServer()
 
 	pb.RegisterExecuteServer(grpcServer, server)
+	grpchealth.RegisterHealthServer(grpcServer, healthServer)
 
+	// TODO maybe need make this turn on/off by configuration?
 	reflection.Register(grpcServer)
 
 	serviceInfo := grpcServer.GetServiceInfo()

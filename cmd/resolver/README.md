@@ -81,3 +81,10 @@ Postman can also be used for testing.
   - And select the service name to test (`Execute/Execute`). If it's not visible, click on `Use Server Reflection`
   - Now, click `Use Example Message` in order to fill in the JSON request template
   - Note that payload has to be base64-encoded, as in the grpcurl example above. The response payload also needs to be decoded.
+
+## HealthCheck
+Resolver have standardized health check endpoints:
+- Watch - allows you to subscribe to the change service status 
+- Check - allows you ask current service status
+
+Both api have same empty request body. You can also try this endpoints in postman using server reflection.

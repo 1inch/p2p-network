@@ -27,7 +27,8 @@ func TestDeployContract(t *testing.T) {
 		PrivateKey: privateKeyHex,
 	}
 
-	_, err := registry.DeployNodeRegistry(ctx, config)
+	address, _, err := registry.DeployNodeRegistry(ctx, config)
+	t.Logf("contract address: %s", address)
 	require.NoError(t, err, "contract deployment failed")
 }
 

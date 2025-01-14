@@ -77,11 +77,6 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 		// setup webrtc listener.
 		var err error
 		ctx := context.Background()
-		grpcClient, err := grpc.New(cfg.GRPCServerAddress)
-		if err != nil {
-			logger.Error("failed to initialize grpc client", slog.Any("err", err))
-			return nil, err
-		}
 		registryClient, err := registry.Dial(ctx, &registry.Config{
 			DialURI:         cfg.BlockchainRPCAddress,
 			PrivateKey:      cfg.PrivateKey,
@@ -91,7 +86,7 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 			logger.Error("failed to initialize registry client", slog.Any("err", err))
 			return nil, err
 		}
-		werbrtcServer, err = webrtc.New(logger.WithGroup("webrtc"), cfg.WebRTCICEServer, grpcClient, registryClient, sdpRequests, iceCandidates)
+		werbrtcServer, err = webrtc.New(logger.WithGroup("webrtc"), cfg.WebRTCICEServer, grpc.New(registryClient), sdpRequests, iceCandidates)
 		if err != nil {
 			logger.Error("failed to create webrtc server", slog.String("iceserver", cfg.WebRTCICEServer), slog.Any("err", err))
 			return nil, err

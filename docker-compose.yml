@@ -1,8 +1,34 @@
+version: '3.8'
+
 services:
+  blockchain:
+    image: ghcr.io/foundry-rs/foundry:v0.3.0
+    entrypoint: "anvil --host 0.0.0.0"
+    ports:
+      - "8545:8545"
+    healthcheck:
+      test: cast chain-id
+      interval: 5s
+
+  deploy-contract:
+    image: ghcr.io/foundry-rs/foundry:v0.3.0
+    entrypoint: "forge create --broadcast --private-key ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --rpc-url http://blockchain:8545 /contracts/NodeRegistry.sol:NodeRegistry"
+    volumes:
+      - "./contracts:/contracts"
+    depends_on:
+      blockchain:
+        condition: service_healthy
+  
   relayer:
     build:
       context: .
       target: relayer
+      dockerfile: ./relayer/Dockerfile
+    volumes:
+      - "./assets/relayer.config.yaml:/app/config.yaml"
+    depends_on:
+      deploy-contract:
+        condition: service_completed_successfully
     ports:
       - "8080:8080"
 
@@ -10,5 +36,11 @@ services:
     build:
       context: .
       target: resolver
+      dockerfile: ./resolver/Dockerfile
+    volumes:
+      - "./assets/resolver.config.yaml:/app/config.yaml"
+    depends_on:
+      deploy-contract:
+        condition: service_completed_successfully
     ports:
       - "8001:8001"

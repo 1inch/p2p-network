@@ -93,10 +93,12 @@ start-anvil:
 .PHONY: stop-anvil
 stop-anvil:
 	@echo "Stopping Anvil..."
-	@if [ -f anvil.pid ]; then \
-		kill `cat anvil.pid` && rm anvil.pid && echo "Anvil stopped successfully."; \
+	@pids=`ps aux | grep 'anvil' | awk '{print $$2}'`; \
+	if [ -n "$$pids" ]; then \
+		echo "Found Anvil PIDs: $$pids"; \
+		echo "$$pids" | xargs kill -9 && echo "Anvil processes killed."; \
 	else \
-		echo "Anvil PID file not found. Is Anvil running?"; \
+		echo "No Anvil processes found."; \
 	fi
 
 test-integration:

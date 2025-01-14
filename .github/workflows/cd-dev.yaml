@@ -46,7 +46,7 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build & Push Relayer Image
-        run: make build_relayer push_relayer VERSION=${{ env.DOCKER_VERSION }} ENVIRONMENT=-dev
+        run: make build_relayer push_relayer -f Makefile.docker VERSION=${{ env.DOCKER_VERSION }} ENVIRONMENT=-dev
 
   build-resolver:
     needs: detect-changes
@@ -65,7 +65,7 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build & Push Resolver Image
-        run: make build_resolver push_resolver VERSION=${{ env.DOCKER_VERSION }} ENVIRONMENT=-dev
+        run: make build_resolver push_resolver -f Makefile.docker VERSION=${{ env.DOCKER_VERSION }} ENVIRONMENT=-dev
 
   configs-deploy:
     if: ${{ needs.detect-changes.outputs.configs == 'true' }}

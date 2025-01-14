@@ -140,6 +140,7 @@ func (r *Relayer) Run(ctx context.Context) error {
 	return nil
 }
 
+// RegisterRelayer registers the relayer node with the registry contract.
 func (r *Relayer) RegisterRelayer(ctx context.Context) error {
 	client, err := registry.Dial(ctx, &registry.Config{
 		DialURI:         r.Config.BlockchainRPCAddress,

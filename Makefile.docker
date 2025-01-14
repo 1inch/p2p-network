@@ -1,0 +1,27 @@
+# Makefile Variables.
+include docker.mk
+
+# Docker's BuildKit feature.
+export DOCKER_BUILDKIT=1
+
+
+build_resolver: ## Build gateway docker image.
+	@echo "$(COLOR_GREEN)Building gateway docker images...$(COLOR_RESET)"
+	@docker build -f $(RESOLVER_DOCKERFILE) -t $(IMAGE_RESOLVER_BACKUP) .
+	@docker build -f $(RESOLVER_DOCKERFILE) -t $(IMAGE_RESOLVER_LATEST) .
+
+push_resolver: ## Push gateway docker image.
+	@echo "$(COLOR_GREEN)Pushing gateway docker images...$(COLOR_RESET)"
+	@docker push $(IMAGE_RESOLVER_BACKUP)
+	@docker push $(IMAGE_RESOLVER_LATEST)
+
+
+build_relayer: ## Build gateway docker image.
+	@echo "$(COLOR_GREEN)Building gateway docker images...$(COLOR_RESET)"
+	@docker build -f $(RELAYER_DOCKERFILE) -t $(IMAGE_RELAYER_BACKUP) .
+	@docker build -f $(RELAYER_DOCKERFILE) -t $(IMAGE_RELAYER_LATEST) .
+
+push_relayer: ## Push gateway docker image.
+	@echo "$(COLOR_GREEN)Pushing gateway docker images...$(COLOR_RESET)"
+	@docker push $(IMAGE_RELAYER_BACKUP)
+	@docker push $(IMAGE_RELAYER_LATEST)

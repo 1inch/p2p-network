@@ -111,7 +111,7 @@ func testWorkFlowAndReturnResponseChan(t *testing.T, logger *slog.Logger, cfg *r
 	sdpRequests, iceCandidates, relayerServer, err := setupRelayer(logger)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
-	resolverGrpcServer, err := setupResolver(cfg)
+	resolverGrpcServer, _, err := setupResolver(cfg)
 	assert.NoError(t, err, "Failed to create resolver grpc server")
 	defer resolverGrpcServer.GracefulStop()
 
@@ -233,7 +233,7 @@ func setupRelayer(logger *slog.Logger) (chan relayerwebrtc.SDPRequest, chan rela
 	return sdpRequests, iceCandidates, server, nil
 }
 
-func setupResolver(cfg *resolver.Config) (*grpc.Server, error) {
+func setupResolver(cfg *resolver.Config) (*grpc.Server, string, error) {
 	return resolver.Run(cfg)
 }
 

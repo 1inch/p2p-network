@@ -36,23 +36,23 @@ func setupRpcServer(listener net.Listener, server *Server, opts ...grpc.ServerOp
 }
 
 // Run starts gRPC server with provided config
-func Run(cfg *Config) (*grpc.Server, error) {
+func Run(cfg *Config) (*grpc.Server, string, error) {
 	// Create TCP listener
 	lis, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", cfg.Port))
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
-		return nil, err
+		return nil, "", err
 	}
 	log.Printf("Listening on %d\n", cfg.Port)
 
 	server, err := newServer(cfg)
 	if err != nil {
 		slog.Error("newServer failed", "error", err)
-		return nil, err
+		return nil, "", err
 	}
 
 	// Wire both to gRPC
 	grpcServer := setupRpcServer(lis, server)
 
-	return grpcServer, nil
+	return grpcServer, lis.Addr().String(), nil
 }

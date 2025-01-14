@@ -113,17 +113,6 @@ func (r *Relayer) Run(ctx context.Context) error {
 	defer cancel()
 
 	group.Go(func() error {
-		r.Logger.Info("register relayer with node registry", slog.String("ip_address", r.HTTPServer.Addr()))
-		err := r.registerRelayer(childCtx)
-		if err != nil {
-			r.Logger.Error("failed to register relayer with node registry", slog.Any("err", err))
-			return err
-		}
-
-		return nil
-	})
-
-	group.Go(func() error {
 		defer cancel()
 
 		r.Logger.Info("http server started", slog.String("addr", r.HTTPServer.Addr()))
@@ -156,7 +145,8 @@ func (r *Relayer) Run(ctx context.Context) error {
 	return nil
 }
 
-func (r *Relayer) registerRelayer(ctx context.Context) error {
+// RegisterRelayer registers the relayer node with the registry contract.
+func (r *Relayer) RegisterRelayer(ctx context.Context) error {
 	client, err := registry.Dial(ctx, &registry.Config{
 		DialURI:         r.Config.BlockchainRPCAddress,
 		PrivateKey:      r.Config.PrivateKey,

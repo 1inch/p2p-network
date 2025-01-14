@@ -72,7 +72,7 @@ func main() {
 						}
 						cfg.Apis = apiConfigs
 					}
-					grpcServer, err := resolver.Run(cfg)
+					grpcServer, _, err := resolver.Run(cfg)
 					if err != nil {
 						slog.Error("Error starting server", "err", err)
 						// TODO: handle error

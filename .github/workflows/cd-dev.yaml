@@ -3,7 +3,10 @@ env:
   DOCKER_VERSION: ${{ github.sha }}
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
     branches:
       - 'dev'
   workflow_dispatch:

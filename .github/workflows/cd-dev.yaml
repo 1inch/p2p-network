@@ -123,7 +123,7 @@ jobs:
         with:
           host: ${{ secrets.SSH_HOST_DEV }}
           port: 22
-          username: ${{ secrets.SSH_USERNAME }}
+          username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd ${{ secrets.PROJECT_PATH_DEV }}

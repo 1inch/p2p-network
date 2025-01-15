@@ -9,9 +9,10 @@ import (
 
 	"github.com/pion/webrtc/v4"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
 
+	mocks "github.com/1inch/p2p-network/internal/mock"
 	pb "github.com/1inch/p2p-network/proto"
 	"github.com/1inch/p2p-network/relayer/grpc"
 	relayerwebrtc "github.com/1inch/p2p-network/relayer/webrtc"
@@ -22,8 +23,8 @@ func TestWebRTCServer_HandleSDP(t *testing.T) {
 	sdpRequests := make(chan relayerwebrtc.SDPRequest, 1)
 	iceCandidates := make(chan relayerwebrtc.ICECandidate)
 
-	mockGRPCClient := &mockGRPCClient{}
-	mockGRPCClient.On("Close").Return(nil)
+	ctrl := gomock.NewController(t)
+	mockGRPCClient := mocks.NewMockGRPCClient(ctrl)
 
 	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
 	assert.NoError(t, err, "Failed to create WebRTC server")
@@ -78,8 +79,9 @@ func TestWebRTCServer_Run_CleanupOnContextCancel(t *testing.T) {
 	sdpRequests := make(chan relayerwebrtc.SDPRequest, 1)
 	iceCandidates := make(chan relayerwebrtc.ICECandidate)
 
-	mockGRPCClient := &mockGRPCClient{}
-	mockGRPCClient.On("Close").Return(nil)
+	ctrl := gomock.NewController(t)
+	mockGRPCClient := mocks.NewMockGRPCClient(ctrl)
+	mockGRPCClient.EXPECT().Close().Return(nil)
 
 	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
 	assert.NoError(t, err, "Failed to create WebRTC server")
@@ -128,8 +130,6 @@ func TestWebRTCServer_Run_CleanupOnContextCancel(t *testing.T) {
 	// Validate that connections are cleaned up
 	_, exists := server.GetConnection("test-session")
 	assert.False(t, exists, "Expected PeerConnection to be removed after cleanup")
-
-	mockGRPCClient.AssertCalled(t, "Close")
 }
 
 func TestWebRTCServer_Run_Shutdown(t *testing.T) {
@@ -137,8 +137,9 @@ func TestWebRTCServer_Run_Shutdown(t *testing.T) {
 	sdpRequests := make(chan relayerwebrtc.SDPRequest, 1)
 	iceCandidates := make(chan relayerwebrtc.ICECandidate)
 
-	mockGRPCClient := &mockGRPCClient{}
-	mockGRPCClient.On("Close").Return(nil)
+	ctrl := gomock.NewController(t)
+	mockGRPCClient := mocks.NewMockGRPCClient(ctrl)
+	mockGRPCClient.EXPECT().Close().Return(nil)
 
 	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
 	assert.NoError(t, err, "Failed to create WebRTC server")
@@ -159,14 +160,12 @@ func TestWebRTCServer_Run_Shutdown(t *testing.T) {
 	// Validate that the server stopped cleanly.
 	connections := server.GetAllConnections()
 	assert.Empty(t, connections, "Expected all PeerConnections to be cleaned up")
-
-	mockGRPCClient.AssertCalled(t, "Close")
 }
 
 func TestWebRTCServer_DataChannel(t *testing.T) {
 	testCases := []struct {
 		description string
-		setupMock   func(mockGRPCClient *mockGRPCClient)
+		setupMock   func(mockGRPCClient *mocks.MockGRPCClient)
 		expected    struct {
 			errorCode pb.ErrorCode
 			errorMsg  string
@@ -175,14 +174,14 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 	}{
 		{
 			description: "Successful gRPC execution",
-			setupMock: func(mockGRPCClient *mockGRPCClient) {
-				mockGRPCClient.On("Execute", mock.Anything, []byte("public-key"), mock.MatchedBy(func(req *pb.ResolverRequest) bool {
+			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
+				mockGRPCClient.EXPECT().Execute(gomock.Any(), []byte("public-key"), gomock.Cond(func(req *pb.ResolverRequest) bool {
 					return req.Id == "test-req" && string(req.Payload) == "test-message"
 				})).Return(&pb.ResolverResponse{
 					Id:      "test-id",
 					Payload: []byte("test-response"),
 				}, nil)
-				mockGRPCClient.On("Close").Return(nil)
+				mockGRPCClient.EXPECT().Close().AnyTimes()
 			},
 			expected: struct {
 				errorCode pb.ErrorCode
@@ -195,11 +194,11 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 		},
 		{
 			description: "Resolver lookup failure",
-			setupMock: func(mockGRPCClient *mockGRPCClient) {
-				mockGRPCClient.On("Execute", mock.Anything, []byte("public-key"), mock.MatchedBy(func(req *pb.ResolverRequest) bool {
+			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
+				mockGRPCClient.EXPECT().Execute(gomock.Any(), []byte("public-key"), gomock.Cond(func(req *pb.ResolverRequest) bool {
 					return req.Id == "test-req" && string(req.Payload) == "resolver-error"
 				})).Return(nil, grpc.ErrResolverLookupFailed)
-				mockGRPCClient.On("Close").Return(nil)
+				mockGRPCClient.EXPECT().Close().AnyTimes()
 			},
 			expected: struct {
 				errorCode pb.ErrorCode
@@ -212,11 +211,11 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 		},
 		{
 			description: "gRPC execution failure",
-			setupMock: func(mockGRPCClient *mockGRPCClient) {
-				mockGRPCClient.On("Execute", mock.Anything, []byte("public-key"), mock.MatchedBy(func(req *pb.ResolverRequest) bool {
+			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
+				mockGRPCClient.EXPECT().Execute(gomock.Any(), []byte("public-key"), gomock.Cond(func(req *pb.ResolverRequest) bool {
 					return req.Id == "test-req" && string(req.Payload) == "grpc-error"
 				})).Return(nil, grpc.ErrGRPCExecutionFailed)
-				mockGRPCClient.On("Close").Return(nil)
+				mockGRPCClient.EXPECT().Close().AnyTimes()
 			},
 			expected: struct {
 				errorCode pb.ErrorCode
@@ -229,8 +228,9 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 		},
 		{
 			description: "Incorrect message format",
-			setupMock: func(mockGRPCClient *mockGRPCClient) {
-				mockGRPCClient.On("Close").Return(nil)
+			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
+				mockGRPCClient.EXPECT().Execute(gomock.Any(), []byte("public-key"), gomock.Any()).Times(0)
+				mockGRPCClient.EXPECT().Close().AnyTimes()
 			},
 			expected: struct {
 				errorCode pb.ErrorCode
@@ -263,7 +263,8 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 			sdpRequests := make(chan relayerwebrtc.SDPRequest, 1)
 			iceCandidates := make(chan relayerwebrtc.ICECandidate)
 
-			mockGRPCClient := &mockGRPCClient{}
+			ctrl := gomock.NewController(t)
+			mockGRPCClient := mocks.NewMockGRPCClient(ctrl)
 			tc.setupMock(mockGRPCClient)
 
 			server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
@@ -348,24 +349,4 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 			}
 		})
 	}
-}
-
-type mockGRPCClient struct {
-	mock.Mock
-}
-
-func (m *mockGRPCClient) Execute(ctx context.Context, publicKey []byte, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
-	args := m.Called(ctx, publicKey, req)
-
-	var response *pb.ResolverResponse
-	if res := args.Get(0); res != nil {
-		response = res.(*pb.ResolverResponse)
-	}
-
-	return response, args.Error(1)
-}
-
-func (m *mockGRPCClient) Close() error {
-	args := m.Called()
-	return args.Error(0)
 }

@@ -8,6 +8,7 @@ golang-deps:
 	@go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 	@go install github.com/ethereum/go-ethereum/cmd/abigen@latest
+	@go install go.uber.org/mock/mockgen@latest
 
 protobuf:
 	protoc -I=./proto --go_out=./proto --go-grpc_out=./proto proto/*.proto
@@ -28,6 +29,10 @@ build: build_relayer build_resolver
 .PHONY: generate_bindings
 generate_bindings:
 	@go generate -x ./contracts
+
+.PHONY: generate_mocks
+generate_mocks:
+	@go generate -x -run="mockgen" ./...
 
 .PHONY: clean_build
 clean_build: clean protobuf build

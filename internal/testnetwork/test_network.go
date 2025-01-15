@@ -1,3 +1,4 @@
+// Package testnetwork provides a test network for running multiple nodes.
 package testnetwork
 
 import (
@@ -52,6 +53,7 @@ var (
 	}
 )
 
+// Config is the configuration for TestNetwork.
 type Config struct {
 	WithNodeRegistry   bool
 	ResolverApiConfigs resolver.ApiConfigs
@@ -173,26 +175,26 @@ func (tn *TestNetwork) Start(ctx context.Context) {
 	ctx, cancel := context.WithCancel(context.Background())
 	tn.cancelFns = cancel
 
-	for i, node := range tn.RelayerNodes {
+	for _, node := range tn.RelayerNodes {
 		tn.wg.Add(1)
 
-		go func(i int, node *relayer.Relayer) {
+		go func(node *relayer.Relayer) {
 			defer tn.wg.Done()
 
 			err := node.Run(ctx)
 			require.NoError(tn.t, err)
-		}(i, node)
+		}(node)
 	}
 
-	for i, node := range tn.ResolverNodes {
+	for _, node := range tn.ResolverNodes {
 		tn.wg.Add(1)
 
-		go func(i int, node *grpc.Server) {
+		go func(node *grpc.Server) {
 			defer tn.wg.Done()
 
 			<-ctx.Done()
 			node.GracefulStop()
-		}(i, node)
+		}(node)
 	}
 }
 
@@ -233,6 +235,7 @@ func (tn *TestNetwork) waitResolver(nodeIndex int) {
 	}, defaultAwaitTimeout, defaultRetryBackoff)
 }
 
+// IsPortBusy checks if the port is busy.
 func IsPortBusy(port int) bool {
 	conn, err := net.Dial("tcp", "127.0.0.1:"+strconv.Itoa(port))
 	if err != nil {

@@ -275,6 +275,7 @@ func cfgResolverWithoutApis() *resolver.Config {
 
 func TestSuccess(t *testing.T) {
 	testnetwork.Run(t, 1, 1, func(tn *testnetwork.TestNetwork) {
+		ctx := context.Background()
 		client := &http.Client{}
 		relayerAddress := tn.RelayerNodes[0].HTTPServer.Addr()
 		jsonReq := &types.JsonRequest{
@@ -301,12 +302,14 @@ func TestSuccess(t *testing.T) {
 				p, err := json.Marshal(payload)
 				assert.NoError(t, err, "Failed to marshal ICECandidate")
 
-				req, err := http.NewRequest("POST", fmt.Sprintf("http://%s/candidate", relayerAddress), bytes.NewBuffer(p))
+				req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("http://%s/candidate", relayerAddress), bytes.NewBuffer(p))
 				assert.NoError(t, err, "Failed to create POST request")
 				req.Header.Set("Content-Type", "application/json")
 
-				_, err = client.Do(req)
+				b, err := client.Do(req)
 				assert.NoError(t, err, "Failed to send POST request")
+				err = b.Body.Close()
+				assert.NoError(t, err, "Failed to close response body")
 			}
 		})
 
@@ -355,7 +358,7 @@ func TestSuccess(t *testing.T) {
 		sdpReq, err := json.Marshal(sdpPayload)
 		assert.NoError(t, err, "Failed to marshal SDP offer")
 
-		req, err := http.NewRequest("POST", fmt.Sprintf("http://%s/sdp", relayerAddress), bytes.NewBuffer(sdpReq))
+		req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("http://%s/sdp", relayerAddress), bytes.NewBuffer(sdpReq))
 		assert.NoError(t, err, "Failed to create SDP request")
 		req.Header.Set("Content-Type", "application/json")
 
@@ -363,7 +366,12 @@ func TestSuccess(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to send POST request: %v", err)
 		}
-		defer resp.Body.Close()
+		t.Cleanup(
+			func() {
+				err := resp.Body.Close()
+				assert.NoError(t, err, "Failed to close response body")
+			},
+		)
 
 		type SDPResponse struct {
 			Answer webrtc.SessionDescription `json:"answer"`

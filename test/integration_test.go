@@ -1,13 +1,18 @@
 package test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"testing"
 
 	"github.com/1inch/p2p-network/internal/registry"
+	"github.com/1inch/p2p-network/internal/testnetwork"
 	pb "github.com/1inch/p2p-network/proto"
 	relayergrpc "github.com/1inch/p2p-network/relayer/grpc"
 	relayerwebrtc "github.com/1inch/p2p-network/relayer/webrtc"
@@ -27,7 +32,7 @@ const (
 	dialURL                = "http://127.0.0.1:8545"
 	privateKey             = "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
 	resolverPrivateKey     = "5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
-	contractAddress        = "0x5fbdb2315678afecb367f032d93f642f64180aa3"
+	contractAddress        = "0x8464135c8F25Da09e49BC8782676a84730C318bC"
 )
 
 type positiveTestCase struct {
@@ -266,4 +271,132 @@ func cfgResolverWithoutApis() *resolver.Config {
 		Port:     8001,
 		LogLevel: slog.LevelInfo,
 	}
+}
+
+func TestSuccess(t *testing.T) {
+	testnetwork.Run(t, 1, 1, func(tn *testnetwork.TestNetwork) {
+		client := &http.Client{}
+		relayerAddress := tn.RelayerNodes[0].HTTPServer.Addr()
+		jsonReq := &types.JsonRequest{
+			Id:     "request-id-1",
+			Method: "GetWalletBalance",
+			Params: []string{"0x0ADfCCa4B2a1132F82488546AcA086D7E24EA324", "latest"},
+		}
+
+		peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+		assert.NoError(t, err, "Failed to create PeerConnection 1")
+
+		// Set up a DataChannel
+		dataChannel, err := peerConnection.CreateDataChannel("test-data-channel", nil)
+		assert.NoError(t, err, "Failed to create DataChannel")
+
+		// change this to call relayer "candidate" endpoint when fix session
+		peerConnection.OnICECandidate(func(candidate *webrtc.ICECandidate) {
+			if candidate != nil {
+				payload := map[string]interface{}{
+					"session_id": "test-session",
+					"candidate":  *candidate,
+				}
+
+				p, err := json.Marshal(payload)
+				assert.NoError(t, err, "Failed to marshal ICECandidate")
+
+				req, err := http.NewRequest("POST", fmt.Sprintf("http://%s/candidate", relayerAddress), bytes.NewBuffer(p))
+				assert.NoError(t, err, "Failed to create POST request")
+				req.Header.Set("Content-Type", "application/json")
+
+				_, err = client.Do(req)
+				assert.NoError(t, err, "Failed to send POST request")
+			}
+		})
+
+		payload, err := json.Marshal(jsonReq)
+		assert.NoError(t, err, "Failed to marshal JsonRequest")
+
+		privKey, err := crypto.HexToECDSA(tn.ResolverPrivateKeys[0])
+		assert.NoError(t, err, "invalid private key")
+		resolverPublicKeyBytes := crypto.CompressPubkey(&privKey.PublicKey)
+
+		msg := &pb.IncomingMessage{
+			Request: &pb.ResolverRequest{
+				Id:      jsonReq.Id,
+				Payload: payload,
+			},
+			PublicKeys: [][]byte{
+				resolverPublicKeyBytes,
+			},
+		}
+		msgBytes, err := proto.Marshal(msg)
+		assert.NoError(t, err, "Failed to marshal ResolverRequest")
+
+		respChan := make(chan []byte, 1)
+
+		dataChannel.OnOpen(func() {
+			err := dataChannel.Send(msgBytes)
+			assert.NoError(t, err)
+		})
+
+		dataChannel.OnMessage(func(msg webrtc.DataChannelMessage) {
+			respChan <- msg.Data
+		})
+
+		// Create and send SDP offer
+		offer, err := peerConnection.CreateOffer(nil)
+		assert.NoError(t, err, "Failed to create SDP offer")
+		err = peerConnection.SetLocalDescription(offer)
+		assert.NoError(t, err, "Failed to set local description")
+
+		// Do sdp request
+		sdpPayload := map[string]interface{}{
+			"session_id": "test-session",
+			"offer":      offer,
+		}
+
+		sdpReq, err := json.Marshal(sdpPayload)
+		assert.NoError(t, err, "Failed to marshal SDP offer")
+
+		req, err := http.NewRequest("POST", fmt.Sprintf("http://%s/sdp", relayerAddress), bytes.NewBuffer(sdpReq))
+		assert.NoError(t, err, "Failed to create SDP request")
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("Failed to send POST request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		type SDPResponse struct {
+			Answer webrtc.SessionDescription `json:"answer"`
+		}
+
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Fatalf("Unexpected status code: %d. Response body: %s", resp.StatusCode, string(bodyBytes))
+		}
+
+		var sdpResp SDPResponse
+		decoder := json.NewDecoder(resp.Body)
+		if err := decoder.Decode(&sdpResp); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
+
+		t.Logf("Received SDP answer: %v", sdpResp.Answer)
+		fmt.Printf("Received SDP answer: %v", sdpResp.Answer)
+
+		err = peerConnection.SetRemoteDescription(sdpResp.Answer)
+		assert.NoError(t, err, "Failed to set remote description")
+
+		respBytes := <-respChan
+		var outMsg pb.OutgoingMessage
+		err = proto.Unmarshal(respBytes, &outMsg)
+		assert.NoError(t, err, "Failed to unmarshal response")
+
+		if result, ok := outMsg.Result.(*pb.OutgoingMessage_Response); ok {
+			var jsonResp types.JsonResponse
+			err = json.Unmarshal(result.Response.Payload, &jsonResp)
+			assert.NoError(t, err, "Failed to unmarshal response")
+
+			assert.Equal(t, 555., jsonResp.Result)
+		}
+	})
 }

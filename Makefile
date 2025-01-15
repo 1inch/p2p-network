@@ -98,7 +98,7 @@ start-anvil:
 		echo "Anvil binary not found"; \
 	elif ! pgrep -x "anvil" > /dev/null; then \
 		echo "Starting anvil on port 8545"; \
-		anvil --account=21 & \
+		anvil --accounts 21 & \
 		timeout 5 sh -c 'until nc -z localhost 8545; do sleep 1; done' || (echo "Anvil failed to start." && exit 1); \
 	else \
 		echo "Anvil is already running"; \

@@ -1,3 +1,12 @@
+# Makefile Variables.
+include docker.mk
+
+# Makefile Variables.
+include Makefile.docker
+
+# Docker's BuildKit feature.
+export DOCKER_BUILDKIT=1
+
 SHELL := /bin/bash
 
 .PHONY: resolver test-resolver test-infura

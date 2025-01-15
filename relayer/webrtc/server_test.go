@@ -25,6 +25,7 @@ func TestWebRTCServer_HandleSDP(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	mockGRPCClient := mocks.NewMockGRPCClient(ctrl)
+	mockGRPCClient.EXPECT().Close().AnyTimes()
 
 	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
 	assert.NoError(t, err, "Failed to create WebRTC server")

@@ -27,6 +27,15 @@ type Config struct {
 	// Default resolver node key
 	PrivateKey string `yaml:"private_key"`
 
+	// Ip with which to run resolver
+	Ip string `yaml:"ip"`
+
+	// Discovery contract address
+	ContractAddress string `yaml:"contract_address"`
+
+	// rpc url to blockchain node
+	RpcUrl string `yaml:"rpc_url"`
+
 	// Can be one or more of the following: default,infura
 	Apis ApiConfigs `yaml:"apis"`
 

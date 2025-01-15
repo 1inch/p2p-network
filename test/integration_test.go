@@ -17,6 +17,7 @@ import (
 	"github.com/pion/webrtc/v4"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -138,16 +139,17 @@ func testWorkFlowAndReturnResponseChan(t *testing.T, logger *slog.Logger, cfg *r
 	privKey, err := crypto.HexToECDSA(resolverPrivateKey)
 	assert.NoError(t, err, "invalid private key")
 	resolverPublicKeyBytes := crypto.CompressPubkey(&privKey.PublicKey)
-	req := &pb.ResolverRequest{
-		Id:      jsonReq.Id,
-		Payload: payload,
-	}
-	reqBytes, err := json.Marshal(relayerwebrtc.IncommingMessage{
-		Request: req,
+
+	req := &pb.IncomingMessage{
+		Request: &pb.ResolverRequest{
+			Id:      jsonReq.Id,
+			Payload: payload,
+		},
 		PublicKeys: [][]byte{
 			resolverPublicKeyBytes,
 		},
-	})
+	}
+	reqBytes, err := proto.Marshal(req)
 	assert.NoError(t, err, "Failed to marshal ResolverRequest")
 
 	respChan := make(chan []byte, 1)
@@ -196,26 +198,23 @@ func testWorkFlowAndReturnResponseChan(t *testing.T, logger *slog.Logger, cfg *r
 
 func positiveTestWorkFlow(t *testing.T, logger *slog.Logger, testCase *positiveTestCase) {
 	respBytes := testWorkFlowAndReturnResponseChan(t, logger, testCase.ConfigForResolver, testCase.SessionId, testCase.JsonRequest)
-	// var resp pb.ResolverResponse
-	var resp relayerwebrtc.OutcommingMessage
-	err := json.Unmarshal(respBytes, &resp)
+	var resp pb.OutgoingMessage
+	err := proto.Unmarshal(respBytes, &resp)
 	assert.NoError(t, err, "Failed to unmarshal response")
 
-	var jsonResp types.JsonResponse
-	err = json.Unmarshal(resp.Response.Payload, &jsonResp)
-	assert.NoError(t, err, "Failed to unmarshal response")
+	if result, ok := resp.Result.(*pb.OutgoingMessage_Response); ok {
+		var jsonResp types.JsonResponse
+		err = json.Unmarshal(result.Response.Payload, &jsonResp)
+		assert.NoError(t, err, "Failed to unmarshal response")
 
-	testCase.FuncCheckActualJsonResponseResult(jsonResp.Result)
+		testCase.FuncCheckActualJsonResponseResult(jsonResp.Result)
+	}
 }
 
 func setupRelayer(logger *slog.Logger) (chan relayerwebrtc.SDPRequest, chan relayerwebrtc.ICECandidate, *relayerwebrtc.Server, error) {
 	ctx := context.Background()
 	sdpRequests := make(chan relayerwebrtc.SDPRequest, 1)
 	iceCandidates := make(chan relayerwebrtc.ICECandidate)
-	grpcClient, err := relayergrpc.New(grpcEndpointToResolver)
-	if err != nil {
-		return nil, nil, nil, err
-	}
 	registry, err := registry.Dial(ctx, &registry.Config{
 		DialURI:         dialURL,
 		PrivateKey:      privateKey,
@@ -225,7 +224,7 @@ func setupRelayer(logger *slog.Logger) (chan relayerwebrtc.SDPRequest, chan rela
 		return nil, nil, nil, err
 	}
 
-	server, err := relayerwebrtc.New(logger, ICEServer, grpcClient, registry, sdpRequests, iceCandidates)
+	server, err := relayerwebrtc.New(logger, ICEServer, relayergrpc.New(registry), sdpRequests, iceCandidates)
 	if err != nil {
 		return nil, nil, nil, err
 	}

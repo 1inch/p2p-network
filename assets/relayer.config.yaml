@@ -1,5 +1,5 @@
 log_level: DEBUG
-http_endpoint: 127.0.0.1:8080
+http_endpoint: relayer:8080
 webrtc_ice_server: stun:stun1.l.google.com:19302
 grpc_server_address: resolver:8001
 blockchain_rpc_address: "http://blockchain:8545"

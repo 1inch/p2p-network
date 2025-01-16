@@ -148,6 +148,9 @@ func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*
 	if err != nil {
 		return nil, fmt.Errorf("failed to create answer: %w", err)
 	}
+
+	gatherComplete := webrtc.GatheringCompletePromise(pc)
+
 	if err := pc.SetLocalDescription(answer); err != nil {
 		return nil, fmt.Errorf("failed to set local description: %w", err)
 	}
@@ -157,7 +160,9 @@ func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*
 	w.connections[sessionID] = pc
 	w.mu.Unlock()
 
-	return &answer, nil
+	<-gatherComplete
+
+	return pc.LocalDescription(), nil
 }
 
 // Run starts the WebRTC server and processes SDP requests until context cancellation.

@@ -69,7 +69,7 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 				return
 			}
 		})
-		httpServer = httpapi.New(logger.WithGroup("httpapi"), httpListener, mux)
+		httpServer = httpapi.New(logger.WithGroup("httpapi"), httpListener, corsMiddleware(mux))
 	}
 
 	var werbrtcServer *webrtc.Server
@@ -157,4 +157,19 @@ func (r *Relayer) RegisterRelayer(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }

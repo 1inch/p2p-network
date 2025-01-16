@@ -10,6 +10,12 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+var grpcClientConfig = `{
+	"healthCheckConfig": {
+		"serviceName": ""
+	}
+}`
+
 // Client wraps the gRPC connection and Execute service client.
 type Client struct {
 	conn          *grpc.ClientConn
@@ -18,7 +24,9 @@ type Client struct {
 
 // New initializes a new gRPC client with Execute service.
 func New(address string) (*Client, error) {
-	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(address,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultServiceConfig(grpcClientConfig))
 	if err != nil {
 		return nil, err
 	}

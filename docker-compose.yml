@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   blockchain:
+    container_name: blockchain
     image: ghcr.io/foundry-rs/foundry:v0.3.0
     entrypoint: "anvil --host 0.0.0.0"
     ports:
@@ -20,12 +21,15 @@ services:
         condition: service_healthy
   
   relayer:
+    container_name: relayer
     build:
       context: .
       target: relayer
       dockerfile: ./relayer/Dockerfile
     volumes:
       - "./assets/relayer.config.yaml:/app/config.yaml"
+    entrypoint: ["./relayer", "run"]
+    command: ["--config", "config.yaml"]
     depends_on:
       deploy-contract:
         condition: service_completed_successfully
@@ -37,7 +41,8 @@ services:
       context: .
       target: resolver
       dockerfile: ./resolver/Dockerfile
-    entrypoint: ./resolver register --configFile config.yaml 
+    entrypoint: ["./app/resolver", "register"]
+    command: ["--configFile", "config.yaml"]
     volumes:
       - "./assets/resolver.config.yaml:/app/config.yaml"
     depends_on:
@@ -45,10 +50,13 @@ services:
         condition: service_completed_successfully
 
   resolver:
+    container_name: resolver
     build:
       context: .
       target: resolver
       dockerfile: ./resolver/Dockerfile
+    entrypoint: ["./resolver", "run"]
+    command: ["--configFile", "config.yaml"]
     volumes:
       - "./assets/resolver.config.yaml:/app/config.yaml"
     depends_on:

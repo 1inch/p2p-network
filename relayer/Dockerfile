@@ -1,20 +1,16 @@
 FROM golang:1.23-alpine as builder
 
-RUN apk add --no-cache make bash
-
 WORKDIR /app
 
 COPY ./../ .
 
 RUN go mod download
 
-RUN make build_relayer
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o relayer ./cmd/relayer/main.go
 
 FROM alpine:3.21 as relayer
 WORKDIR /app
 
-COPY --from=builder /app/bin/relayer .
+COPY --from=builder /app/relayer .
 COPY --from=builder /app/assets/relayer.config.yaml /app/config.yaml
 
-ENTRYPOINT ["./relayer", "run"]
-CMD ["--config", "config.yaml"]

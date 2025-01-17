@@ -261,6 +261,7 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 					},
 				},
 			}
+			w.logger.Error("failed to unmarshal protobuf message", slog.Any("err", err))
 			if sendErr := w.sendResponse(dc, respMessage); sendErr != nil {
 				w.logger.Error("failed to send invalid message error response", slog.Any("err", sendErr))
 			}
@@ -286,6 +287,7 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 						},
 						PublicKey: publicKey,
 					}
+					w.logger.Error("failed to execute gRPC request", slog.Any("err", err))
 					if sendErr := w.sendResponse(dc, respMessage); sendErr != nil {
 						w.logger.Error("failed to send error response", slog.Any("err", sendErr))
 					}
@@ -299,6 +301,8 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 					PublicKey: publicKey,
 				}
 
+				w.logger.Debug("sending response", slog.Any("response", response), slog.String("publicKey", fmt.Sprintf("%x", publicKey)))
+
 				if err := w.sendResponse(dc, respMessage); err != nil {
 					respMessage := &pb.OutgoingMessage{
 						Result: &pb.OutgoingMessage_Error{
@@ -309,6 +313,7 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 						},
 						PublicKey: publicKey,
 					}
+					w.logger.Error("failed to send response", slog.Any("err", err))
 					if sendErr := w.sendResponse(dc, respMessage); sendErr != nil {
 						w.logger.Error("failed to send data channel error response", slog.Any("err", sendErr))
 					}

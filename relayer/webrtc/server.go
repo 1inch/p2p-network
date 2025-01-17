@@ -268,6 +268,8 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 			return
 		}
 
+		w.logger.Debug("received message", slog.Any("request", message.Request), slog.String("publicKeys", fmt.Sprintf("%x", message.PublicKeys)))
+
 		var wg sync.WaitGroup
 		for _, publicKey := range message.PublicKeys {
 			wg.Add(1)

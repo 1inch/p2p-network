@@ -74,7 +74,7 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 		})
 
 		httpServer = httpapi.New(logger.WithGroup("httpapi"), httpListener, corsMiddleware(mux))
-  }
+	}
 
 	var werbrtcServer *webrtc.Server
 	{

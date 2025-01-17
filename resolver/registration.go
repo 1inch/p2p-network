@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net"
 
-	"github.com/1inch/p2p-network/internal/encryption"
 	"github.com/1inch/p2p-network/internal/registry"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -65,11 +64,7 @@ func (r *RegistrationResolver) Register(ctx context.Context) (*common.Hash, erro
 		r.logger.Error("error when map hex to private key")
 		return nil, err
 	}
-	publicKey, err := encryption.ToPEM(privateKey)
-	if err != nil {
-		r.logger.Error("error when produces PEM with public given corresponding private key")
-		return nil, err
-	}
+	publicKey := crypto.CompressPubkey(&privateKey.PublicKey)
 
 	tx, err := r.registryClient.Registry.RegisterResolver(r.registryClient.Auth, r.cfg.Ip, publicKey)
 	if err != nil {

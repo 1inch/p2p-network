@@ -47,7 +47,7 @@ func New(registryClient *registry.Client) *Client {
 // Execute wraps the Execute RPC call.
 func (c *Client) Execute(ctx context.Context, publicKey []byte, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
 	conn, err := c.getConn(publicKey)
-  if err != nil {
+	if err != nil {
 		return nil, err
 	}
 
@@ -92,9 +92,9 @@ func (c *Client) getConn(publicKey []byte) (*grpc.ClientConn, error) {
 		return nil, fmt.Errorf("%w: publicKey %s: %w", ErrResolverLookupFailed, hex.EncodeToString(publicKey), err)
 	}
 
-	conn, err := grpc.NewClient(address, 
-      grpc.WithTransportCredentials(insecure.NewCredentials()),
-      grpc.WithDefaultServiceConfig(grpcClientConfig))
+	conn, err := grpc.NewClient(address,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultServiceConfig(grpcClientConfig))
 	if err != nil {
 		return nil, err
 	}

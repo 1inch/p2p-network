@@ -43,13 +43,20 @@ func (s *ResolverTestSuite) SetupTest() {
 
 	server, err := newServer(cfg)
 	if err != nil {
-		logger.Error("newServer failed", "error", err)
+		s.logger.Error("newServer failed", slog.Any("error", err.Error()))
 		return
 	}
 
 	s.resolverPrivateKey = server.privateKey
 
-	grpcServer := setupRpcServer(listener, server)
+	grpcServer := newGrpcServer(logger, server)
+	go func() {
+		err = grpcServer.Serve(listener)
+		if err != nil {
+			logger.Error("newServer failed", "error", err)
+			return
+		}
+	}()
 	logger.Info("### Server started")
 	s.server = grpcServer
 

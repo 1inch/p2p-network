@@ -81,3 +81,20 @@ Postman can also be used for testing.
   - And select the service name to test (`Execute/Execute`). If it's not visible, click on `Use Server Reflection`
   - Now, click `Use Example Message` in order to fill in the JSON request template
   - Note that payload has to be base64-encoded, as in the grpcurl example above. The response payload also needs to be decoded.
+
+
+## Metrics
+Resolver can return metrics for telemetry, you can go to http endpoint **/metrics** and get metrics.
+This option is customizable. You can turn on/off by config.yaml.
+For enable the endpoint add in config:
+```
+metric:
+  enabled: true
+  port: 8081
+```
+If you dont want enable the endpoint, dont added this in config or modify the configuration in this way:
+```
+metric:
+  enabled: false
+  port: 8081
+```

@@ -73,19 +73,14 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 			logger.Debug("called /health endpoint")
 		})
 
-		httpServer = httpapi.New(logger.WithGroup("httpapi"), httpListener, mux)
-	}
+		httpServer = httpapi.New(logger.WithGroup("httpapi"), httpListener, corsMiddleware(mux))
+  }
 
 	var werbrtcServer *webrtc.Server
 	{
 		// setup webrtc listener.
 		var err error
 		ctx := context.Background()
-		grpcClient, err := grpc.New(cfg.GRPCServerAddress)
-		if err != nil {
-			logger.Error("failed to initialize grpc client", slog.Any("err", err))
-			return nil, err
-		}
 		registryClient, err := registry.Dial(ctx, &registry.Config{
 			DialURI:         cfg.BlockchainRPCAddress,
 			PrivateKey:      cfg.PrivateKey,
@@ -95,7 +90,7 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 			logger.Error("failed to initialize registry client", slog.Any("err", err))
 			return nil, err
 		}
-		werbrtcServer, err = webrtc.New(logger.WithGroup("webrtc"), cfg.WebRTCICEServer, grpcClient, registryClient, sdpRequests, iceCandidates)
+		werbrtcServer, err = webrtc.New(logger.WithGroup("webrtc"), cfg.WebRTCICEServer, grpc.New(registryClient), sdpRequests, iceCandidates)
 		if err != nil {
 			logger.Error("failed to create webrtc server", slog.String("iceserver", cfg.WebRTCICEServer), slog.Any("err", err))
 			return nil, err
@@ -115,17 +110,6 @@ func (r *Relayer) Run(ctx context.Context) error {
 	var group errgroup.Group
 	childCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
-	group.Go(func() error {
-		r.Logger.Info("register relayer with node registry", slog.String("ip_address", r.HTTPServer.Addr()))
-		err := r.registerRelayer(childCtx)
-		if err != nil {
-			r.Logger.Error("failed to register relayer with node registry", slog.Any("err", err))
-			return err
-		}
-
-		return nil
-	})
 
 	group.Go(func() error {
 		defer cancel()
@@ -160,7 +144,8 @@ func (r *Relayer) Run(ctx context.Context) error {
 	return nil
 }
 
-func (r *Relayer) registerRelayer(ctx context.Context) error {
+// RegisterRelayer registers the relayer node with the registry contract.
+func (r *Relayer) RegisterRelayer(ctx context.Context) error {
 	client, err := registry.Dial(ctx, &registry.Config{
 		DialURI:         r.Config.BlockchainRPCAddress,
 		PrivateKey:      r.Config.PrivateKey,
@@ -176,4 +161,19 @@ func (r *Relayer) registerRelayer(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }

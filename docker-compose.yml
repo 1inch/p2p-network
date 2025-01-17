@@ -32,6 +32,18 @@ services:
     ports:
       - "8080:8080"
 
+  register-resolver:
+    build:
+      context: .
+      target: resolver
+      dockerfile: ./resolver/Dockerfile
+    entrypoint: ./resolver register --configFile config.yaml 
+    volumes:
+      - "./assets/resolver.config.yaml:/app/config.yaml"
+    depends_on:
+      deploy-contract:
+        condition: service_completed_successfully
+
   resolver:
     build:
       context: .
@@ -40,7 +52,7 @@ services:
     volumes:
       - "./assets/resolver.config.yaml:/app/config.yaml"
     depends_on:
-      deploy-contract:
+      register-resolver:
         condition: service_completed_successfully
     ports:
       - "8001:8001"

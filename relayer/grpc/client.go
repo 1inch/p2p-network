@@ -3,8 +3,12 @@ package grpc
 
 import (
 	"context"
+	"encoding/hex"
+	"errors"
 	"fmt"
+	"sync"
 
+	"github.com/1inch/p2p-network/internal/registry"
 	pb "github.com/1inch/p2p-network/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -16,52 +20,85 @@ var grpcClientConfig = `{
 	}
 }`
 
+var (
+	// ErrResolverLookupFailed is returned when the registry client fails to resolve a public key.
+	ErrResolverLookupFailed = errors.New("resolver lookup failed")
+	// ErrGRPCExecutionFailed is returned when the grpc execution fails.
+	ErrGRPCExecutionFailed = errors.New("gRPC execution failed")
+	// ErrGRPCConnectionCloseFailed is returned when the grpc execution fails.
+	ErrGRPCConnectionCloseFailed = errors.New("gRPC connection close failed")
+)
+
 // Client wraps the gRPC connection and Execute service client.
 type Client struct {
-	conn          *grpc.ClientConn
-	executeClient pb.ExecuteClient
+	conns          map[string]*grpc.ClientConn
+	registryClient *registry.Client
+	mu             sync.Mutex
 }
 
 // New initializes a new gRPC client with Execute service.
-func New(address string) (*Client, error) {
-	conn, err := grpc.NewClient(address,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithDefaultServiceConfig(grpcClientConfig))
-	if err != nil {
+func New(registryClient *registry.Client) *Client {
+	return &Client{
+		conns:          make(map[string]*grpc.ClientConn),
+		registryClient: registryClient,
+	}
+}
+
+// Execute wraps the Execute RPC call.
+func (c *Client) Execute(ctx context.Context, publicKey []byte, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
+	conn, err := c.getConn(publicKey)
+  if err != nil {
 		return nil, err
 	}
-	return &Client{
-		conn:          conn,
-		executeClient: pb.NewExecuteClient(conn),
-	}, nil
+
+	client := pb.NewExecuteClient(conn)
+	response, err := client.Execute(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: publicKey %s: %w", ErrGRPCExecutionFailed, hex.EncodeToString(publicKey), err)
+	}
+
+	return response, nil
 }
 
 // Close closes the gRPC connection.
 func (c *Client) Close() error {
-	return c.conn.Close()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	var closeErrs []error
+	for _, conn := range c.conns {
+		if err := conn.Close(); err != nil {
+			closeErrs = append(closeErrs, fmt.Errorf("failed to close gRPC connection: %w", err))
+		}
+	}
+
+	if len(closeErrs) > 0 {
+		return fmt.Errorf("%w: multiple errors: %v", ErrGRPCConnectionCloseFailed, closeErrs)
+	}
+
+	return nil
 }
 
-// Execute wraps the Execute RPC call.
-func (c *Client) Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
-	return c.executeClient.Execute(ctx, req)
-}
+func (c *Client) getConn(publicKey []byte) (*grpc.ClientConn, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-// ExecuteRequest wraps the Execute RPC call.
-func (c *Client) ExecuteRequest(ctx context.Context, address string, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
-	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if conn, exists := c.conns[string(publicKey)]; exists {
+		return conn, nil
+	}
+
+	address, err := c.registryClient.GetResolver(publicKey)
+	if err != nil {
+		return nil, fmt.Errorf("%w: publicKey %s: %w", ErrResolverLookupFailed, hex.EncodeToString(publicKey), err)
+	}
+
+	conn, err := grpc.NewClient(address, 
+      grpc.WithTransportCredentials(insecure.NewCredentials()),
+      grpc.WithDefaultServiceConfig(grpcClientConfig))
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		if cerr := conn.Close(); cerr != nil {
-			err = fmt.Errorf("failed to close gRPC connection: %w", cerr)
-		}
-	}()
 
-	response, executeErr := pb.NewExecuteClient(conn).Execute(ctx, req)
-	if executeErr != nil {
-		return nil, executeErr
-	}
-
-	return response, err
+	c.conns[string(publicKey)] = conn
+	return conn, nil
 }

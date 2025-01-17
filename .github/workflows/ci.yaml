@@ -3,11 +3,13 @@ name: CI
 on:
   pull_request:
     branches:
-      - main
+      - 'main'
+      - 'dev'
     types: [opened, synchronize, edited]
   push:
     branches:
       - 'main'
+      - 'dev'
 
 jobs:
   verify_build:

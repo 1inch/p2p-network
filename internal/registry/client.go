@@ -72,30 +72,30 @@ func Dial(ctx context.Context, config *Config) (*Client, error) {
 }
 
 // DeployNodeRegistry deploys node registry smart contract and returns it's client.
-func DeployNodeRegistry(ctx context.Context, config *Config) (*Client, error) {
+func DeployNodeRegistry(ctx context.Context, config *Config) (common.Address, *Client, error) {
 	ethClient, err := ethclient.Dial(config.DialURI)
 	if err != nil {
-		return &Client{}, err
+		return common.Address{}, &Client{}, err
 	}
 
 	privateKey, err := crypto.HexToECDSA(config.PrivateKey)
 	if err != nil {
-		return &Client{}, err
+		return common.Address{}, &Client{}, err
 	}
 
 	chainID, err := ethClient.ChainID(ctx)
 	if err != nil {
-		return &Client{}, err
+		return common.Address{}, &Client{}, err
 	}
 
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainID)
 	if err != nil {
-		return &Client{}, err
+		return common.Address{}, &Client{}, err
 	}
 
-	_, tx, registry, err := contracts.DeployNodeRegistry(auth, ethClient)
+	address, tx, registry, err := contracts.DeployNodeRegistry(auth, ethClient)
 	if err != nil {
-		return &Client{}, err
+		return common.Address{}, &Client{}, err
 	}
 
 	client := &Client{
@@ -105,7 +105,7 @@ func DeployNodeRegistry(ctx context.Context, config *Config) (*Client, error) {
 		ticker:   time.NewTicker(200 * time.Millisecond),
 	}
 
-	return client, client.WaitForTx(ctx, tx.Hash())
+	return address, client, client.WaitForTx(ctx, tx.Hash())
 }
 
 // GetRelayer retrieves the current relayer address from the registry.

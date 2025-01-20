@@ -19,7 +19,7 @@ func (s *ConfigTestSuite) TestYamlConfigParsing() {
 	cfg, err := configs.LoadConfig[Config]("resolver.config.example.yaml")
 	s.Require().NoError(err)
 
-	s.Require().Equal(cfg.Port, 8001)
+	s.Require().Equal(cfg.GrpcEndpoint, "127.0.0.1:8001")
 	s.Require().Equal(cfg.Apis.Default.Enabled, false)
 	s.Require().Equal(cfg.Apis.Infura.Enabled, true)
 	s.Require().Equal(cfg.Apis.Infura.Key, "test-key")

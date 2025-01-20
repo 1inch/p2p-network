@@ -51,3 +51,10 @@ To run the tests, use the following command:
 ```bash
 make test
 ```
+
+
+## HealthCheck
+Relayer have http health check endpoint:
+- **/health** - allows you ask current service status
+
+The api have empty request body. If service is ok, the api return http status **200 ok**.

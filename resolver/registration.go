@@ -5,9 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
+	"net/url"
 
-	"github.com/1inch/p2p-network/internal/encryption"
 	"github.com/1inch/p2p-network/internal/registry"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -27,7 +26,7 @@ type RegistrationResolver struct {
 
 // NewRegistrationResolver create new instans RegistrationResolver
 func NewRegistrationResolver(logger *slog.Logger, cfg *Config) (*RegistrationResolver, error) {
-	err := validateIp(cfg.Ip)
+	err := validateEndpoint(cfg.GrpcEndpoint)
 	if err != nil {
 		logger.Error("error when validate ip", slog.Any("err", err.Error()))
 		return nil, err
@@ -65,13 +64,9 @@ func (r *RegistrationResolver) Register(ctx context.Context) (*common.Hash, erro
 		r.logger.Error("error when map hex to private key")
 		return nil, err
 	}
-	publicKey, err := encryption.ToPEM(privateKey)
-	if err != nil {
-		r.logger.Error("error when produces PEM with public given corresponding private key")
-		return nil, err
-	}
+	publicKey := crypto.CompressPubkey(&privateKey.PublicKey)
 
-	tx, err := r.registryClient.Registry.RegisterResolver(r.registryClient.Auth, r.cfg.Ip, publicKey)
+	tx, err := r.registryClient.Registry.RegisterResolver(r.registryClient.Auth, r.cfg.GrpcEndpoint, publicKey)
 	if err != nil {
 		r.logger.Error("error when call contract method 'RegisterResolver'", slog.Any("err", err.Error()))
 		return nil, err
@@ -88,9 +83,9 @@ func (r *RegistrationResolver) Register(ctx context.Context) (*common.Hash, erro
 	return &txHash, nil
 }
 
-func validateIp(ip string) error {
-	netIp := net.ParseIP(ip)
-	if netIp.To4() == nil {
+func validateEndpoint(endpoint string) error {
+	_, err := url.ParseRequestURI(endpoint)
+	if err != nil {
 		return errInvalidFormatIp
 	}
 	return nil

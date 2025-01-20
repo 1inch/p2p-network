@@ -16,7 +16,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/pion/webrtc/v4"
 	"github.com/stretchr/testify/assert"
-	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -112,9 +111,14 @@ func testWorkFlowAndReturnResponseChan(t *testing.T, logger *slog.Logger, cfg *r
 	sdpRequests, iceCandidates, relayerServer, err := setupRelayer(logger)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
-	resolverGrpcServer, err := setupResolver(cfg)
-	assert.NoError(t, err, "Failed to create resolver grpc server")
-	defer resolverGrpcServer.GracefulStop()
+	resolverGrpcServer, err := setupResolver(cfg, logger)
+	assert.NoError(t, err, "Failed to create resolver node")
+	err = resolverGrpcServer.Run()
+	assert.NoError(t, err, "Failed to start resolver")
+	defer func() {
+		err = resolverGrpcServer.Stop()
+		assert.NoError(t, err, "Failed to stop resolver")
+	}()
 
 	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
 	assert.NoError(t, err, "Failed to create PeerConnection 1")
@@ -232,8 +236,8 @@ func setupRelayer(logger *slog.Logger) (chan relayerwebrtc.SDPRequest, chan rela
 	return sdpRequests, iceCandidates, server, nil
 }
 
-func setupResolver(cfg *resolver.Config) (*grpc.Server, error) {
-	return resolver.Run(cfg)
+func setupResolver(cfg *resolver.Config, logger *slog.Logger) (*resolver.Resolver, error) {
+	return resolver.New(*cfg, logger)
 }
 
 func cfgResolverWithDefaultApi() *resolver.Config {
@@ -263,7 +267,7 @@ func cfgResolverWithInfuraApi() *resolver.Config {
 
 func cfgResolverWithoutApis() *resolver.Config {
 	return &resolver.Config{
-		Port:     8001,
-		LogLevel: slog.LevelInfo,
+		GrpcEndpoint: grpcEndpointToResolver,
+		LogLevel:     slog.LevelInfo,
 	}
 }

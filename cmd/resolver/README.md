@@ -82,9 +82,27 @@ Postman can also be used for testing.
   - Now, click `Use Example Message` in order to fill in the JSON request template
   - Note that payload has to be base64-encoded, as in the grpcurl example above. The response payload also needs to be decoded.
 
+
 ## HealthCheck
 Resolver have standardized health check endpoints:
 - Watch - allows you to subscribe to the change service status 
 - Check - allows you ask current service status
 
 Both api have same empty request body. You can also try this endpoints in postman using server reflection.
+
+
+## Metrics
+Resolver can return metrics for telemetry, you can go to http endpoint **/metrics** and get metrics.
+This option is customizable. You can turn on/off by config.yaml.
+For enable the endpoint add in config:
+```
+metric:
+  enabled: true
+  port: 8081
+```
+If you dont want enable the endpoint, dont added this in config or modify the configuration in this way:
+```
+metric:
+  enabled: false
+  port: 8081
+```

@@ -45,12 +45,13 @@ func main() {
 					},
 				},
 				Action: func(c *cli.Context) error {
-					cfg := &resolver.Config{}
+					cfg := resolver.Config{}
 					// Try to load config file, if present
 					loadedCfg := loadConfigByPath(c.String("configFile"))
 					if loadedCfg != nil {
-						cfg = loadedCfg
+						cfg = *loadedCfg
 					}
+					logger := setupLogger(cfg)
 
 					// Override config file value for port
 					port := c.Int("port")
@@ -70,18 +71,21 @@ func main() {
 						}
 						cfg.Apis = apiConfigs
 					}
-					grpcServer, _, err := resolver.Run(cfg)
+					resolverNode, err := resolver.New(cfg, logger)
 					if err != nil {
-						slog.Error("Error starting server", "err", err)
-						// TODO: handle error
+						logger.Error("Error create resolver node", slog.Any("err", err))
 						return err
 					}
+					err = resolverNode.Run()
+					if err != nil {
+						logger.Error("Failed start resolver", slog.Any("err", err))
+						return err
+					}
+
 					interrupted := make(chan os.Signal, 1)
 					signal.Notify(interrupted, syscall.SIGINT, syscall.SIGTERM)
 					<-interrupted
-					grpcServer.GracefulStop()
-
-					return nil
+					return resolverNode.Stop()
 				},
 			},
 			cliCommandRegister(),
@@ -182,4 +186,13 @@ func loadConfigByPath(configPath string) *resolver.Config {
 	}
 
 	return nil
+}
+
+func setupLogger(cfg resolver.Config) *slog.Logger {
+	leveler := new(slog.LevelVar)
+	leveler.Set(cfg.LogLevel.Level())
+	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: leveler,
+	})
+	return slog.New(handler)
 }

@@ -19,6 +19,12 @@ type ApiConfigs struct {
 	Infura  InfuraApiConfig  `yaml:"infura"`
 }
 
+// MetricConfig contain params for configure metrics
+type MetricConfig struct {
+	Enabled bool `yaml:"enabled"`
+	Port    uint `yaml:"port"`
+}
+
 // Config represents resolver server config
 type Config struct {
 	// gRPC server port
@@ -41,4 +47,7 @@ type Config struct {
 
 	// Default loglevel
 	LogLevel slog.Level `yaml:"log_level"`
+
+	// Configuration metric
+	Metric MetricConfig `yaml:"metric"`
 }

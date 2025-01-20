@@ -148,6 +148,9 @@ func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*
 	if err != nil {
 		return nil, fmt.Errorf("failed to create answer: %w", err)
 	}
+
+	gatherComplete := webrtc.GatheringCompletePromise(pc)
+
 	if err := pc.SetLocalDescription(answer); err != nil {
 		return nil, fmt.Errorf("failed to set local description: %w", err)
 	}
@@ -157,7 +160,9 @@ func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*
 	w.connections[sessionID] = pc
 	w.mu.Unlock()
 
-	return &answer, nil
+	<-gatherComplete
+
+	return pc.LocalDescription(), nil
 }
 
 // Run starts the WebRTC server and processes SDP requests until context cancellation.
@@ -256,11 +261,14 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 					},
 				},
 			}
+			w.logger.Error("failed to unmarshal protobuf message", slog.Any("err", err))
 			if sendErr := w.sendResponse(dc, respMessage); sendErr != nil {
 				w.logger.Error("failed to send invalid message error response", slog.Any("err", sendErr))
 			}
 			return
 		}
+
+		w.logger.Debug("received message", slog.Any("request", message.Request), slog.String("publicKeys", fmt.Sprintf("%x", message.PublicKeys)))
 
 		var wg sync.WaitGroup
 		for _, publicKey := range message.PublicKeys {
@@ -281,6 +289,7 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 						},
 						PublicKey: publicKey,
 					}
+					w.logger.Error("failed to execute gRPC request", slog.Any("err", err))
 					if sendErr := w.sendResponse(dc, respMessage); sendErr != nil {
 						w.logger.Error("failed to send error response", slog.Any("err", sendErr))
 					}
@@ -294,6 +303,8 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 					PublicKey: publicKey,
 				}
 
+				w.logger.Debug("sending response", slog.Any("response", response), slog.String("publicKey", fmt.Sprintf("%x", publicKey)))
+
 				if err := w.sendResponse(dc, respMessage); err != nil {
 					respMessage := &pb.OutgoingMessage{
 						Result: &pb.OutgoingMessage_Error{
@@ -304,6 +315,7 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 						},
 						PublicKey: publicKey,
 					}
+					w.logger.Error("failed to send response", slog.Any("err", err))
 					if sendErr := w.sendResponse(dc, respMessage); sendErr != nil {
 						w.logger.Error("failed to send data channel error response", slog.Any("err", sendErr))
 					}

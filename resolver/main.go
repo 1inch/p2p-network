@@ -40,7 +40,6 @@ func New(cfg Config, logger *slog.Logger) (*Resolver, error) {
 		logger.Error("Failed create server", slog.Any("err", err.Error()))
 	}
 
-	var serverOption *grpc.ServerOption
 	// if metric enabled setup http server for metrics
 	if cfg.Metric.Enabled {
 		exporter, err := prometheus.New()
@@ -55,15 +54,14 @@ func New(cfg Config, logger *slog.Logger) (*Resolver, error) {
 				MeterProvider: meterProvider,
 			},
 		})
-		serverOption = &meterServerOption
-
+		serverOption := meterServerOption
 		metricServer := newMetricServer(&cfg)
 
 		resolver.httpMetricServer = metricServer
+		resolver.grpcServer = newGrpcServer(logger, server, serverOption)
 	}
 
-	resolver.grpcServer = newGrpcServer(logger, server, *serverOption)
-
+	resolver.grpcServer = newGrpcServer(logger, server)
 	return resolver, nil
 }
 

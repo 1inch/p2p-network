@@ -93,15 +93,20 @@ func newMetricServer(cfg *Config) *http.Server {
 
 // Run starts gRPC server with provided config
 func (r *Resolver) Run() error {
+	_, port, err := net.SplitHostPort(r.cfg.GrpcEndpoint)
+	if err != nil {
+		r.logger.Error("failed split endpoint")
+		return err
+	}
 	// Create TCP listener
-	listener, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", r.cfg.Port))
+	listener, err := net.Listen("tcp", fmt.Sprintf("localhost:%s", port))
 	if err != nil {
 		r.logger.Error("failed to listen", slog.Any("err", err))
 		return err
 	}
 
 	go func() {
-		r.logger.Info("Listening grpc server", slog.Any("port", r.cfg.Port))
+		r.logger.Info("Listening grpc server", slog.Any("port", port))
 		if err := r.grpcServer.Serve(listener); err != nil {
 			r.logger.Error("Failed to start grpc server", slog.Any("err", err.Error()))
 			return

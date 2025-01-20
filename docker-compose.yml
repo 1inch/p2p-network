@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   blockchain:
+    container_name: blockchain
     image: ghcr.io/foundry-rs/foundry:v0.3.0
     entrypoint: "anvil --host 0.0.0.0"
     ports:
@@ -9,6 +10,8 @@ services:
     healthcheck:
       test: cast chain-id
       interval: 5s
+    networks:
+      - fullstack
 
   deploy-contract:
     image: ghcr.io/foundry-rs/foundry:v0.3.0
@@ -18,41 +21,44 @@ services:
     depends_on:
       blockchain:
         condition: service_healthy
-  
+    networks:
+      - fullstack
+
   relayer:
+    container_name: relayer
     build:
       context: .
       target: relayer
       dockerfile: ./relayer/Dockerfile
     volumes:
       - "./assets/relayer.config.yaml:/app/config.yaml"
+    entrypoint: ["/bin/sh", "-c", "./main run --config config.yaml"]
     depends_on:
       deploy-contract:
         condition: service_completed_successfully
     ports:
       - "8080:8080"
+    networks:
+      - fullstack
 
-  register-resolver:
+  resolver:
+    container_name: resolver
     build:
       context: .
       target: resolver
       dockerfile: ./resolver/Dockerfile
-    entrypoint: ./resolver register --configFile config.yaml 
     volumes:
       - "./assets/resolver.config.yaml:/app/config.yaml"
+    entrypoint: ["/bin/sh", "-c", "./main run --configFile config.yaml && ./main register --configFile config.yaml"]
     depends_on:
       deploy-contract:
         condition: service_completed_successfully
-
-  resolver:
-    build:
-      context: .
-      target: resolver
-      dockerfile: ./resolver/Dockerfile
-    volumes:
-      - "./assets/resolver.config.yaml:/app/config.yaml"
-    depends_on:
-      register-resolver:
-        condition: service_completed_successfully
     ports:
       - "8001:8001"
+    networks:
+      - fullstack
+
+networks:
+  fullstack:
+    driver: bridge
+

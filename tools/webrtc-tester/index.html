@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>WebRTC DataChannel Example</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    #logs {
+      border: 1px solid #ccc; 
+      padding: 10px; 
+      width: 600px; 
+      height: 300px; 
+      overflow-y: scroll; 
+      margin-bottom: 20px;
+      background-color: #f9f9f9;
+    }
+    textarea, input[type="text"] {
+      width: 600px; 
+      padding: 10px;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+      font-size: 16px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      border: none;
+      border-radius: 4px;
+      background-color: #4CAF50;
+      color: white;
+      transition: background-color 0.3s ease;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+      font-size: 16px;
+    }
+    #publicKeyInput {
+      height: 1rem;
+    }
+    .checkbox-container {
+      margin-bottom: 10px;
+    }
+    .checkbox-container input {
+      margin-right: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>WebRTC Data Channel Test</h1>
+  <div id="logs"></div>
+  <label for="publicKeyInput">Public Key (Hex):</label>
+  <input type="text" id="publicKeyInput" value="039d9031e97dd78ff8c15aa86939de9b1e791066a0224e331bc962a2099a7b1f04" placeholder="Enter public key in hex" />
+  <div class="checkbox-container">
+    <label for="sendRawCheckbox">
+      <input type="checkbox" id="sendRawCheckbox" />
+      Send Raw Request
+    </label>
+    <label for="encryptCheckbox">
+      <input type="checkbox" id="encryptCheckbox" />
+      Encrypt Request
+    </label>
+  </div>
+  <label for="messageArea">Message:</label>
+  <textarea id="messageArea" placeholder="Enter message..."></textarea>
+  <button id="sendBtn">Send</button>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js" integrity="sha512-EHe9bE7YtRkBvh/3qnO65Wn3JgMjOonF6wO6Xc7dygWNm12jRfmC5pVXlVUgP0bGZ0Elhjx+EMKK1Ujr0YvR3A==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="//cdn.jsdelivr.net/npm/protobufjs@7.X.X/dist/protobuf.min.js"></script>
+  <script src="relayer_bundle.js"></script>
+
+  <script>
+    function hexStringToUint8Array(hex) {
+      hex = hex.replace(/[^0-9a-fA-F]/g, '');
+      if (hex.length % 2 !== 0) {
+          hex = '0' + hex;
+      }
+      const byteLength = hex.length / 2;
+      const bytes = new Uint8Array(byteLength);
+
+      for (let i = 0; i < byteLength; i++) {
+          bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+      }
+
+      return bytes;
+    }
+    async function generateRSAKeyPair() {
+      try {
+        const keyPair = await window.crypto.subtle.generateKey(
+          {
+            name: "RSA-OAEP",
+            modulusLength: 2048,
+            publicExponent: new Uint8Array([0x01, 0x00, 0x01]),
+            hash: "SHA-256",
+          },
+          true,
+          ["encrypt", "decrypt"]
+        );
+        console.log("RSA Key Pair Generated.");
+        return keyPair;
+      } catch (error) {
+        console.error("Error generating RSA key pair:", error);
+      }
+    }
+    function ab2str(buf) {
+      return String.fromCharCode.apply(null, new Uint8Array(buf));
+    }
+    function pemToArrayBuffer(pem) {
+      // Do i need to remove this?
+      const pemHeader = "-----BEGIN PUBLIC KEY-----";
+      const pemFooter = "-----END PUBLIC KEY-----";
+      const pemContents = pem.substring(
+        pem.indexOf(pemHeader) + pemHeader.length,
+        pem.indexOf(pemFooter)
+      ).replace(/\s+/g, ''); 
+
+      const binaryString = window.atob(pemContents);
+
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      return bytes.buffer;
+    }
+    async function exportPublicKey(key) {
+      try {
+        const exported = await window.crypto.subtle.exportKey("spki", key);
+        const exportedAsString = ab2str(exported);
+        const exportedAsBase64 = window.btoa(exportedAsString);
+        const pemExported = `-----BEGIN PUBLIC KEY-----\n${exportedAsBase64}\n-----END PUBLIC KEY-----`;
+        log(`[KeyExport] Public Key Exported: ${pemExported}`);
+        const exportedBytes = pemToArrayBuffer(pemExported);
+        return exportedBytes;
+      } catch (error) {
+        log("[KeyExport] Error exporting public key: " + error.message);
+      }
+    }
+    async function decryptMessage(msg, privateKey) {
+      try {
+        const decrypted = await window.crypto.subtle.decrypt(
+          {
+            name: "RSA-OAEP",
+          },
+          privateKey,
+          msg
+        );
+        const decoder = new TextDecoder();
+        const decryptedMsg = decoder.decode(decrypted);
+        log("[Decryption] Data decrypted.", decryptedMsg);
+        return decryptedMsg;
+      } catch (error) {
+        log("[Decryption] Error decrypting data: " + error.message);
+      }
+    }
+    async function initializeKeys() {
+      rsaKeyPair = await generateRSAKeyPair();
+      if (rsaKeyPair) {
+        exportedPublicKey = await exportPublicKey(rsaKeyPair.publicKey);
+        log("[Initialization] RSA Key Pair Initialized.");
+      }
+    }
+
+
+    const { protobuf } = window;
+
+    const {
+        ErrorCode,
+        Error: ErrorMessage,
+        IncomingMessage,
+        OutgoingMessage,
+        ResolverRequest,
+        ResolverResponse
+    } = protobuf.roots.default.proto;
+
+    const logDiv = document.getElementById('logs');
+    function log(msg) {
+      const p = document.createElement('p');
+      p.textContent = msg;
+      logDiv.appendChild(p);
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    const messageArea = document.getElementById('messageArea');
+    const sendBtn = document.getElementById('sendBtn');
+    const publicKeyInput = document.getElementById('publicKeyInput');
+    const sendRawCheckbox = document.getElementById('sendRawCheckbox');
+    const encryptCheckbox = document.getElementById('encryptCheckbox');
+
+
+    const HOST = 'http://161.35.27.188:10003';
+    const SDP_ENDPOINT = `${HOST}/sdp`;
+    const CANDIDATE_ENDPOINT = `${HOST}/candidate`;
+    const SESSION_ID = 'webrtc-session';
+
+    let pc; 
+    let dataChannel;
+    let rsaKeyPair; // RSA Key Pair
+    let exportedPublicKey;
+
+    async function startWebRTC() {
+      await initializeKeys();
+
+      pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      });
+
+      dataChannel = pc.createDataChannel("myDataChannel");
+
+      dataChannel.onopen = () => {
+        log("[DataChannel] State: " + dataChannel.readyState);
+      };
+      dataChannel.onclose = () => {
+        log("[DataChannel] Closed.");
+      };
+      dataChannel.onmessage = (event) => {
+        try {
+          const incomingBuffer = new Uint8Array(event.data);
+          const incomingMsg = OutgoingMessage.decode(incomingBuffer);
+
+          if (incomingMsg.response && incomingMsg.response.result) {
+            log("[DataChannel] Received ResolverResponse: " + JSON.stringify(incomingMsg.response.result));
+          } else if (incomingMsg.error) {
+            log("[DataChannel] Received Error: " + incomingMsg.error.message);
+          }
+        } catch (err) {
+          log("[DataChannel] Error decoding message: " + err);
+        }
+      };
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          let candidate = parsePionCandidate(event.candidate.candidate);
+          const candidatePayload = {
+            session_id: SESSION_ID,
+            candidate: candidate
+          };
+          fetch(CANDIDATE_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(candidatePayload)
+          })
+          .then(() => log("[ICE] Sent candidate."))
+          .catch(err => log("[ICE] Error sending candidate: " + err));
+        } else {
+          log("[ICE] No more candidates or gathering done.");
+        }
+      };
+
+      pc.oniceconnectionstatechange = () => {
+        log("[ICE] ICE Connection State: " + pc.iceConnectionState);
+      };
+
+      pc.onconnectionstatechange = () => {
+        log("[PC] Connection State: " + pc.connectionState);
+      };
+      pc.onsignalingstatechange = () => {
+        log("[PC] Signaling State: " + pc.signalingState);
+      };
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      log("[Offer] Created and set local description.");
+
+      const offerPayload = {
+        session_id: SESSION_ID,
+        offer: {
+          type: offer.type,
+          sdp: offer.sdp
+        }
+      };
+
+      fetch(SDP_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(offerPayload)
+      })
+      .then(response => response.json())
+      .then(async (data) => {
+        if (!data.answer || !data.answer.sdp) {
+          throw new Error("No valid answer in response");
+        }
+        log("[Offer] Received answer from server.");
+
+        const remoteAnswer = new RTCSessionDescription({
+          type: data.answer.type,
+          sdp: data.answer.sdp
+        });
+        await pc.setRemoteDescription(remoteAnswer);
+        log("[Answer] Remote description set.");
+      })
+      .catch(err => {
+        log("[Offer] Error receiving answer: " + err);
+      });
+    }
+
+    startWebRTC().catch(err => log("Error initializing WebRTC: " + err));
+
+    sendBtn.onclick = () => {
+      if (!dataChannel || dataChannel.readyState !== "open") {
+        log("[Send] Data channel not open.");
+        return;
+      }
+      const msg = messageArea.value.trim();
+      if (!msg) {
+        log("[Send] Message is empty.");
+        return;
+      }
+
+      const pubKey = publicKeyInput.value.trim();
+      if (!pubKey) {
+        log("[Send] Public key is empty.");
+        return;
+      }
+
+      let message;
+
+      const sendRaw = sendRawCheckbox.checked;
+      if (sendRaw) {
+        message = msg;
+      } else {
+        const outgoingMsg = IncomingMessage.create({
+          request: ResolverRequest.create({
+            id: "resolver-request",
+            payload: new TextEncoder().encode(msg),
+            encrypted: false,
+            publicKey: exportedPublicKey,
+          }),
+          publicKeys: [hexStringToUint8Array(pubKey)]
+        });
+
+        message = IncomingMessage.encode(outgoingMsg).finish();
+      }
+
+      dataChannel.send(message);
+      log("[Send] Sent: " + msg);
+      messageArea.value = "";
+    };
+
+    function parsePionCandidate(candidateLine) {
+      const parts = candidateLine.trim().split(/\s+/);
+      if (!parts[0].startsWith("candidate:") || parts.length < 8) {
+        throw new Error("Invalid ICE candidate string format: " + candidateLine);
+      }
+      const foundation = parts[0].split(":")[1];
+      const component = parseInt(parts[1], 10);
+      const protocol = parts[2];
+      const priority = parseInt(parts[3], 10);
+      const address = parts[4];
+      const port = parseInt(parts[5], 10);
+      if (parts[6] !== "typ") {
+        throw new Error(`Expected 'typ' at position 6 but got: ${parts[6]}`);
+      }
+      const candidateType = parts[7];
+
+      let relatedAddress = "";
+      let relatedPort = 0;
+      let tcpType = "";
+      let i = 8;
+      while (i < parts.length) {
+        switch (parts[i]) {
+          case "raddr":
+            relatedAddress = parts[i + 1] || "";
+            i += 2;
+            break;
+          case "rport":
+            relatedPort = parseInt(parts[i + 1], 10) || 0;
+            i += 2;
+            break;
+          case "tcptype":
+            tcpType = parts[i + 1] || "";
+            i += 2;
+            break;
+          default:
+            i += 1;
+        }
+      }
+
+      return {
+        foundation,
+        priority,
+        address,
+        protocol: parseProtocol(protocol),
+        port,
+        type: candidateType,
+        component,
+        relatedAddress,
+        relatedPort,
+        tcpType,
+      };
+    }
+
+    function parseProtocol(protocolStr) {
+      switch (protocolStr) {
+        case "udp":
+          return 1;
+        case "tcp":
+          return 2;
+        default:
+          return 0;
+      }
+    }
+  </script>
+</body>
+</html>

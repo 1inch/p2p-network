@@ -14,3 +14,6 @@ WORKDIR /app
 COPY --from=builder /app/relayer .
 COPY --from=builder /app/assets/relayer.config.yaml /app/config.yaml
 
+RUN apk update && apk upgrade --no-cache libcrypto3 libssl3
+RUN adduser -u 1000 relayer --disabled-password
+USER relayer

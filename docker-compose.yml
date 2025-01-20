@@ -10,6 +10,8 @@ services:
     healthcheck:
       test: cast chain-id
       interval: 5s
+    networks:
+      - fullstack
 
   deploy-contract:
     image: ghcr.io/foundry-rs/foundry:v0.3.0
@@ -19,7 +21,9 @@ services:
     depends_on:
       blockchain:
         condition: service_healthy
-  
+    networks:
+      - fullstack
+      
   relayer:
     container_name: relayer
     build:
@@ -28,26 +32,14 @@ services:
       dockerfile: ./relayer/Dockerfile
     volumes:
       - "./assets/relayer.config.yaml:/app/config.yaml"
-    entrypoint: ["./relayer", "run"]
-    command: ["--config", "config.yaml"]
+    entrypoint: ["/bin/sh", "-c", "./main run --config config.yaml"]
     depends_on:
       deploy-contract:
         condition: service_completed_successfully
     ports:
       - "8080:8080"
-
-  register-resolver:
-    build:
-      context: .
-      target: resolver
-      dockerfile: ./resolver/Dockerfile
-    entrypoint: ["./app/resolver", "register"]
-    command: ["--configFile", "config.yaml"]
-    volumes:
-      - "./assets/resolver.config.yaml:/app/config.yaml"
-    depends_on:
-      deploy-contract:
-        condition: service_completed_successfully
+    networks:
+      - fullstack
 
   resolver:
     container_name: resolver
@@ -55,12 +47,16 @@ services:
       context: .
       target: resolver
       dockerfile: ./resolver/Dockerfile
-    entrypoint: ["./resolver", "run"]
-    command: ["--configFile", "config.yaml"]
     volumes:
       - "./assets/resolver.config.yaml:/app/config.yaml"
+    entrypoint: ["/bin/sh", "-c", "./main run --configFile config.yaml && ./main register --configFile config.yaml"]
     depends_on:
-      register-resolver:
+      deploy-contract:
         condition: service_completed_successfully
     ports:
       - "8001:8001"
+    networks:
+      - fullstack
+networks:
+  fullstack:
+    driver: bridge

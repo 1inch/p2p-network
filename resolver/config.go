@@ -21,14 +21,12 @@ type ApiConfigs struct {
 
 // Config represents resolver server config
 type Config struct {
-	// gRPC server port
-	Port int `yaml:"port"`
+
+	// gRPC server endpoint
+	GrpcEndpoint string `yaml:"grpc_endpoint"`
 
 	// Default resolver node key
 	PrivateKey string `yaml:"private_key"`
-
-	// Ip with which to run resolver
-	Ip string `yaml:"ip"`
 
 	// Discovery contract address
 	ContractAddress string `yaml:"contract_address"`

@@ -1,6 +1,5 @@
 log_level: DEBUG
-port: 8001
-ip: "127.0.0.1"
+grpc_endpoint: 127.0.0.1:8001
 rpc_url: "127.0.0.1:8545"
 contract_address: "0x5fbdb2315678afecb367f032d93f642f64180aa3"
 private_key: 5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a

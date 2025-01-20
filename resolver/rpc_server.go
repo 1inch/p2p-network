@@ -81,7 +81,7 @@ func newServer(cfg *Config) (*Server, error) {
 		}
 		privKey = privKeyGenerated
 	}
-	return &Server{privateKey: privKey, logger: logger.With("module", "server"), handler: handler}, nil
+	return &Server{privateKey: privKey, logger: logger.With("module", "rpc-server"), handler: handler}, nil
 }
 
 // Execute executes ResolverRequest.

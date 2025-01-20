@@ -23,10 +23,9 @@ func main() {
 				Name:  "run",
 				Usage: "Runs resolver node",
 				Flags: []cli.Flag{
-					&cli.IntFlag{
-						Name:  "port",
-						Value: 8001,
-						Usage: "gRPC server port",
+					&cli.StringFlag{
+						Name:  "grpc_endpoint",
+						Usage: "gRPC server endpoint",
 					},
 					&cli.StringFlag{
 						Name:  "api",
@@ -54,9 +53,9 @@ func main() {
 					logger := setupLogger(cfg)
 
 					// Override config file value for port
-					port := c.Int("port")
-					if port != 0 {
-						cfg.Port = port
+					grpcEndpoint := c.String("grpc_endpoint")
+					if grpcEndpoint != "" {
+						cfg.GrpcEndpoint = grpcEndpoint
 					}
 					// Override config file value for apis
 					api := c.String("api")
@@ -146,11 +145,6 @@ func cliCommandRegister() cli.Command {
 			rpc_url := c.String("rpc_url")
 			if rpc_url != "" {
 				cfg.RpcUrl = rpc_url
-			}
-
-			ip := c.String("ip")
-			if ip != "" {
-				cfg.Ip = ip
 			}
 
 			privKey := c.String("privKey")

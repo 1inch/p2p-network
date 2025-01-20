@@ -55,6 +55,7 @@ services:
         condition: service_completed_successfully
     ports:
       - "8001:8001"
+      - "8081:8081"
     networks:
       - fullstack
 

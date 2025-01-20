@@ -9,3 +9,6 @@ apis:
   infura:
     key: "test-key"
     enabled: false
+metric:
+  enabled: true
+  port: 8081

@@ -23,7 +23,7 @@ services:
         condition: service_healthy
     networks:
       - fullstack
-      
+
   relayer:
     container_name: relayer
     build:
@@ -60,3 +60,4 @@ services:
 networks:
   fullstack:
     driver: bridge
+    

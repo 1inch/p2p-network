@@ -61,14 +61,14 @@ func NewRegistrationResolver(logger *slog.Logger, cfg *Config) (*RegistrationRes
 func (r *RegistrationResolver) Register(ctx context.Context) (*common.Hash, error) {
 	privateKey, err := crypto.HexToECDSA(r.cfg.PrivateKey)
 	if err != nil {
-		r.logger.Error("error when map hex to private key")
+		r.logger.Error("failed map hex to private key")
 		return nil, err
 	}
 	publicKey := crypto.CompressPubkey(&privateKey.PublicKey)
 
 	tx, err := r.registryClient.Registry.RegisterResolver(r.registryClient.Auth, r.cfg.GrpcEndpoint, publicKey)
 	if err != nil {
-		r.logger.Error("error when call contract method 'RegisterResolver'", slog.Any("err", err.Error()))
+		r.logger.Error("failed call contract method 'RegisterResolver'", slog.Any("err", err.Error()))
 		return nil, err
 	}
 
@@ -76,7 +76,7 @@ func (r *RegistrationResolver) Register(ctx context.Context) (*common.Hash, erro
 
 	err = r.registryClient.WaitForTx(ctx, txHash)
 	if err != nil {
-		r.logger.Error("error when process transaction for register resolver", slog.Any("err", err.Error()))
+		r.logger.Error("failed process transaction for register resolver", slog.Any("err", err.Error()))
 		return nil, err
 	}
 

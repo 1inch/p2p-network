@@ -16,7 +16,7 @@ type infuraApiHandler struct {
 func NewInfuraApiHandler(cfg InfuraApiConfig, logger *slog.Logger) ApiHandler {
 	client, err := gethrpc.DialHTTP("https://mainnet.infura.io/v3/" + cfg.Key)
 	if err != nil {
-		slog.Error("Error creating Infura API client", "err", err)
+		slog.Error("error creating Infura API client", "err", err)
 		return nil
 	}
 	return &infuraApiHandler{client, logger.With("module", "api-infura")}
@@ -46,14 +46,14 @@ func (h *infuraApiHandler) getWalletBalance(params []string) (string, error) {
 
 	err := h.validateRequest(address, block)
 	if err != nil {
-		h.logger.Error("error when try validate request for GetWalletBalance")
+		h.logger.Error("failed validate request for GetWalletBalance")
 		return "", err
 	}
 
 	var result string
 	err = h.client.Call(&result, "eth_getBalance", address, block)
 	if err != nil {
-		h.logger.Error("Error invoking JSON-RPC request", "err", err)
+		h.logger.Error("failed invoking JSON-RPC request", "err", err)
 		return "", err
 	}
 	h.logger.Info("GetWalletBalance() processed")

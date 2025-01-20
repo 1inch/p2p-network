@@ -4,8 +4,6 @@ package resolver
 import (
 	"context"
 	"crypto"
-	"crypto/rand"
-	"crypto/rsa"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -18,14 +16,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const (
-	errMessageForInvalidArgumens     = "error when process request"
-	fmtDescriptionErrorUnknownMethod = "unknown handle method: %s"
-)
-
 var (
-	errWrongRequest = errors.New("wrong request body")
-	errEmptyParam   = errors.New("empty parameter")
+	errEmptyParam = errors.New("empty parameter")
 )
 
 // Server represents gRPC server.
@@ -37,15 +29,6 @@ type Server struct {
 	logger *slog.Logger
 
 	handler ApiHandler
-}
-
-func generateKey() (*rsa.PrivateKey, error) {
-	p, err := rsa.GenerateKey(rand.Reader, 4096)
-	if err != nil {
-		return nil, err
-	}
-
-	return p, nil
 }
 
 // newServer creates new RpcServer.
@@ -86,8 +69,6 @@ func newServer(cfg *Config) (*Server, error) {
 
 // Execute executes ResolverRequest.
 func (s *Server) Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
-	s.logger.Info("###Incoming request", "id", req.Id)
-
 	err := s.validateResolverRequest(req)
 	response := &pb.ResolverResponse{
 		Id: req.Id,
@@ -150,7 +131,7 @@ func (s *Server) getJsonRequest(req *pb.ResolverRequest) (*types.JsonRequest, er
 	}
 	err := json.Unmarshal(payload, &jsonReq)
 	if err != nil {
-		s.logger.Error("error when try unmarshal request payload")
+		s.logger.Error("failed unmarshal request payload")
 		return nil, err
 	}
 	return &jsonReq, nil
@@ -159,13 +140,13 @@ func (s *Server) getJsonRequest(req *pb.ResolverRequest) (*types.JsonRequest, er
 func (s *Server) processRequest(jsonReq *types.JsonRequest) ([]byte, error) {
 	jsonResponses, err := s.handler.Process(jsonReq)
 	if err != nil {
-		s.logger.Error("error when process request in handler")
+		s.logger.Error("failed process request in handler")
 		return nil, err
 	}
 
 	byteArr, err := json.Marshal(jsonResponses)
 	if err != nil {
-		s.logger.Error("error when try marshal json responses ")
+		s.logger.Error("failed marshal json responses ")
 		return nil, err
 	}
 
@@ -189,7 +170,7 @@ func (s *Server) formatGrpcError(resp *pb.ResolverResponse, err error) error {
 
 	errStatus, err := status.New(code, err.Error()).WithDetails(resp)
 	if err != nil {
-		return status.New(codes.Internal, "error when try format err status").Err()
+		return status.New(codes.Internal, "failed format err status").Err()
 	}
 	return errStatus.Err()
 }

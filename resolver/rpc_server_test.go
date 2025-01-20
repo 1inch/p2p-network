@@ -53,11 +53,11 @@ func (s *ResolverTestSuite) SetupTest() {
 	go func() {
 		err = grpcServer.Serve(listener)
 		if err != nil {
-			logger.Error("newServer failed", "error", err)
+			s.logger.Error("newServer failed", "error", err)
 			return
 		}
 	}()
-	logger.Info("### Server started")
+	logger.Info("Server started")
 	s.server = grpcServer
 
 	conn, err := grpc.NewClient("passthrough://bufnet", grpc.WithContextDialer(
@@ -65,7 +65,7 @@ func (s *ResolverTestSuite) SetupTest() {
 			return listener.Dial()
 		}), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		logger.Info("### error", "err", err)
+		logger.Error("failed start new grpc client ", "err", err.Error())
 	}
 
 	s.conn = conn
@@ -105,13 +105,12 @@ func (s *ResolverTestSuite) getWalletBalancePayloadNoParams() []byte {
 func (s *ResolverTestSuite) TestExecutePositive() {
 	req := &pb.ResolverRequest{Id: "1", Payload: s.getWalletBalancePayloadOk(), Encrypted: false}
 
-	s.logger.Info("###about to execute")
 	resp, err := s.client.Execute(context.Background(), req)
 	if err != nil {
-		s.logger.Info("Execute error", "error", err)
+		s.logger.Error("Execute error", "error", err)
 		s.Require().Fail("execute error")
 	}
-	s.logger.Info("test output", "resp", resp)
+
 	var jsonResp types.JsonResponse
 	err = json.Unmarshal(resp.Payload, &jsonResp)
 	s.Require().NoError(err)
@@ -141,13 +140,11 @@ func (s *ResolverTestSuite) TestExecuteEncrypted() {
 
 	req := &pb.ResolverRequest{Id: "1", Payload: encryptedPayload, Encrypted: true, PublicKey: relayerPEM}
 
-	slog.Info("###about to execute")
 	resp, err := s.client.Execute(context.Background(), req)
 	if err != nil {
 		slog.Info("Execute error", "error", err)
 		s.Require().Fail("execute error")
 	}
-	slog.Info("test output", "resp", resp)
 
 	decryptedPayload, err := encryption.Decrypt(resp.Payload, relayerKey)
 	s.Require().NoError(err)

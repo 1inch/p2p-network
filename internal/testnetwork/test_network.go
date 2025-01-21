@@ -158,6 +158,7 @@ func New(ctx context.Context, t *testing.T, relayerCount, resolverCount int, opt
 		require.NoError(testNetwork.t, err)
 
 		testNetwork.GRPCPorts[i] = port
+		registerResolver(ctx, t, i, cfg, resolverNode.Addr())
 
 		testNetwork.ResolverNodes[i] = resolverNode
 	}
@@ -265,8 +266,8 @@ func parsePort(addr string) (int, error) {
 
 func getResolverConfig() resolver.Config {
 	return resolver.Config{
-		Port:     0,
-		LogLevel: slog.LevelInfo,
+		GrpcEndpoint: "localhost:0",
+		LogLevel:     slog.LevelInfo,
 		Apis: resolver.ApiConfigs{
 			Default: resolver.DefaultApiConfig{
 				Enabled: true,

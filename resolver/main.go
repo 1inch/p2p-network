@@ -67,13 +67,7 @@ func New(cfg Config, logger *slog.Logger) (*Resolver, error) {
 	resolver.grpcServer = newGrpcServer(logger, server)
 
 	// Create TCP listener
-	_, port, err := net.SplitHostPort(cfg.GrpcEndpoint)
-	if err != nil {
-		logger.Error("failed split endpoint")
-		return nil, err
-	}
-
-	listener, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
+	listener, err := net.Listen("tcp", cfg.GrpcEndpoint)
 	if err != nil {
 		logger.Error("Failed to create net listener", slog.Any("err", err.Error()))
 		return nil, err

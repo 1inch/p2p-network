@@ -16,22 +16,30 @@ jobs:
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      configs: ${{ github.event_name == 'workflow_dispatch' || steps.changes.outputs.configs }}
-      node_registry: ${{ github.event_name == 'workflow_dispatch' || steps.changes.outputs.node_registry }}
+      configs: ${{  steps.read-artifact.outputs.configs || github.event_name == 'workflow_dispatch' }}
+      node_registry: ${{  steps.read-artifact.outputs.node-registry || github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
-
-      - name: Detect Changes
-        uses: dorny/paths-filter@v3
-        id: changes
+        uses: actions/checkout@v4
+          
+      - name: Download Artifact
         if: ${{ github.event_name != 'workflow_dispatch' }}
+        uses: actions/download-artifact@v4
         with:
-          filters: |
-            configs:
-              - 'assets/**'
-            node_registry:
-              - 'contracts/NodeRegistry.sol'
+          name: project-changes
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+
+      - name: Read Outputs from JSON
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        id: read-artifact
+        run: |
+            content=$(cat outputs.json)
+            {
+              echo "configs=$(echo $content | jq -r '.configs')"
+              echo "node_registry=$(echo $content | jq -r '."node-registry"')"
+            } >> "$GITHUB_OUTPUT"
 
   build-relayer:
     needs: detect-changes

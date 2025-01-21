@@ -12,6 +12,40 @@ on:
       - 'dev'
 
 jobs:
+
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      configs: ${{ steps.changes.outputs.configs }}
+      node_registry: ${{ steps.changes.outputs.node-registry }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Detect Changes
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            configs:
+              - 'assets/**'
+            node-registry:
+              - 'contracts/NodeRegistry.sol'
+      - name: Set Outputs as JSON
+#        if: github.ref == 'refs/heads/dev'
+        run: |
+          echo '{}' | jq \
+            --arg configs "${{ steps.changes.outputs.configs }}" \
+            --arg node_registry "${{ steps.changes.outputs.node-registry }}" \
+            '. + {configs: $configs, "node-registry": $node_registry}' \
+            > outputs.json
+      - name: Upload Changes Artifact
+#        if: github.ref == 'refs/heads/dev'
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-changes
+          path: outputs.json  
+
   verify_build:
     runs-on: ubuntu-latest
 

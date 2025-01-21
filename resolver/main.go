@@ -165,7 +165,6 @@ func loggingRequestHandler(ctx context.Context, logger *slog.Logger, req interfa
 		logger.Debug("with error", slog.Any("err", err.Error()))
 	} else {
 		logger.Info("request process success", slog.Any("method", info.FullMethod))
-		protojson.Format(resp.(proto.Message))
 		logger.Debug("with response", slog.Any("resp", protojson.Format(resp.(proto.Message))))
 	}
 

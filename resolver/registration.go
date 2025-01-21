@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
+	"net"
 
 	"github.com/1inch/p2p-network/internal/registry"
 	"github.com/ethereum/go-ethereum/common"
@@ -13,8 +13,8 @@ import (
 )
 
 var (
-	errInvalidFormatAddress = errors.New("invalid format for address")
-	errInvalidFormatIp      = errors.New("invalid format for ip")
+	errInvalidFormatAddress  = errors.New("invalid format for address")
+	errInvalidFormatEndpoint = errors.New("invalid format for endpoint")
 )
 
 // RegistrationResolver describe registration new resolver on blockchain registry
@@ -26,9 +26,10 @@ type RegistrationResolver struct {
 
 // NewRegistrationResolver create new instans RegistrationResolver
 func NewRegistrationResolver(logger *slog.Logger, cfg *Config) (*RegistrationResolver, error) {
+	logger.Info("endpoint", slog.Any("end", cfg.GrpcEndpoint))
 	err := validateEndpoint(cfg.GrpcEndpoint)
 	if err != nil {
-		logger.Error("error when validate ip", slog.Any("err", err.Error()))
+		logger.Error("error when validate endpoint", slog.Any("err", err.Error()))
 		return nil, err
 	}
 
@@ -84,9 +85,9 @@ func (r *RegistrationResolver) Register(ctx context.Context) (*common.Hash, erro
 }
 
 func validateEndpoint(endpoint string) error {
-	_, err := url.ParseRequestURI(endpoint)
+	_, _, err := net.SplitHostPort(endpoint)
 	if err != nil {
-		return errInvalidFormatIp
+		return errInvalidFormatEndpoint
 	}
 	return nil
 }

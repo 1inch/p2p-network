@@ -14,6 +14,8 @@ import (
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	grpchealth "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/stats/opentelemetry"
 )
@@ -65,7 +67,13 @@ func New(cfg Config, logger *slog.Logger) (*Resolver, error) {
 	resolver.grpcServer = newGrpcServer(logger, server)
 
 	// Create TCP listener
-	listener, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", cfg.Port))
+	_, port, err := net.SplitHostPort(cfg.GrpcEndpoint)
+	if err != nil {
+		logger.Error("failed split endpoint")
+		return nil, err
+	}
+
+	listener, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
 	if err != nil {
 		logger.Error("Failed to create net listener", slog.Any("err", err.Error()))
 		return nil, err
@@ -77,8 +85,12 @@ func New(cfg Config, logger *slog.Logger) (*Resolver, error) {
 
 func newGrpcServer(logger *slog.Logger, server *Server, opts ...grpc.ServerOption) *grpc.Server {
 	grpcServer := grpc.NewServer(opts...)
+	healthServer := health.NewServer()
 
 	pb.RegisterExecuteServer(grpcServer, server)
+	grpchealth.RegisterHealthServer(grpcServer, healthServer)
+
+	// TODO maybe need make this turn on/off by configuration?
 	reflection.Register(grpcServer)
 
 	serviceInfo := grpcServer.GetServiceInfo()
@@ -104,7 +116,7 @@ func newMetricServer(cfg *Config) *http.Server {
 // Run starts gRPC server with provided config
 func (r *Resolver) Run() error {
 	go func() {
-		r.logger.Info("Listening grpc server", slog.Any("port", r.cfg.Port))
+		r.logger.Info("Listening grpc server", slog.Any("address", r.Addr()))
 		if err := r.grpcServer.Serve(r.lis); err != nil {
 			r.logger.Error("Failed to start grpc server", slog.Any("err", err.Error()))
 			return

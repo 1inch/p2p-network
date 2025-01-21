@@ -272,8 +272,8 @@ func cfgResolverWithInfuraApi() *resolver.Config {
 
 func cfgResolverWithoutApis() *resolver.Config {
 	return &resolver.Config{
-		Port:     8001,
-		LogLevel: slog.LevelInfo,
+		GrpcEndpoint: grpcEndpointToResolver,
+		LogLevel:     slog.LevelInfo,
 	}
 }
 

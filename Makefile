@@ -25,11 +25,12 @@ protobuf:
 resolver:
 	go run ./resolver
 
-.PHONY: build_relayer build_resolver
-build_relayer:
+.PHONY: build_relayer_local
+build_relayer_local:
 	@go build -o bin/relayer ./cmd/relayer/
 
-build_resolver:
+.PHONY: build_resolver_local
+build_resolver_local:
 	@go build -o bin/resolver ./cmd/resolver/
 
 .PHONY: build

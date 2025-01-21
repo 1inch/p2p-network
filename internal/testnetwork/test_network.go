@@ -17,7 +17,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 )
 
 const (
@@ -69,7 +68,7 @@ type TestNetwork struct {
 	wg                  sync.WaitGroup
 	RelayerCount        int
 	ResolverCount       int
-	ResolverNodes       []*grpc.Server
+	ResolverNodes       []*resolver.Resolver
 	RelayerNodes        []*relayer.Relayer
 	GRPCPorts           []int
 	HTTPPorts           []int
@@ -99,7 +98,7 @@ func New(ctx context.Context, t *testing.T, relayerCount, resolverCount int, opt
 		RelayerCount:        relayerCount,
 		ResolverCount:       resolverCount,
 		RelayerNodes:        make([]*relayer.Relayer, relayerCount),
-		ResolverNodes:       make([]*grpc.Server, resolverCount),
+		ResolverNodes:       make([]*resolver.Resolver, resolverCount),
 		GRPCPorts:           make([]int, resolverCount),
 		HTTPPorts:           make([]int, relayerCount),
 		ResolverPrivateKeys: resolverPrivateKeys,
@@ -125,13 +124,13 @@ func New(ctx context.Context, t *testing.T, relayerCount, resolverCount int, opt
 	})
 	assert.NoError(t, err, "Failed to create registry client")
 
-	for i := 0; i < relayerCount; i++ {
-		var level = new(slog.LevelVar)
-		logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-			Level: level,
-		}))
-		level.Set(slog.LevelDebug)
+	var level = new(slog.LevelVar)
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
+		Level: level,
+	}))
+	level.Set(slog.LevelDebug)
 
+	for i := 0; i < relayerCount; i++ {
 		relayerNode, err := relayer.New(&cfg, logger)
 		require.NoError(testNetwork.t, err)
 
@@ -152,15 +151,14 @@ func New(ctx context.Context, t *testing.T, relayerCount, resolverCount int, opt
 			resolverCfg.Apis.Infura.Key = tnCfg.ResolverApiConfigs.Infura.Key
 		}
 
-		resolverNode, address, err := resolver.Run(resolverCfg)
+		resolverNode, err := resolver.New(resolverCfg, logger)
 		require.NoError(testNetwork.t, err)
 
-		port, err := parsePort(address)
+		port, err := parsePort(resolverNode.Addr())
 		require.NoError(testNetwork.t, err)
 
 		testNetwork.GRPCPorts[i] = port
 
-		registerResolver(ctx, t, i, cfg, address)
 		testNetwork.ResolverNodes[i] = resolverNode
 	}
 
@@ -189,11 +187,15 @@ func (tn *TestNetwork) Start(ctx context.Context) {
 	for _, node := range tn.ResolverNodes {
 		tn.wg.Add(1)
 
-		go func(node *grpc.Server) {
+		go func(node *resolver.Resolver) {
 			defer tn.wg.Done()
 
+			err := node.Run()
+			require.NoError(tn.t, err)
+
 			<-ctx.Done()
-			node.GracefulStop()
+			err = node.Stop()
+			require.NoError(tn.t, err)
 		}(node)
 	}
 }
@@ -261,8 +263,8 @@ func parsePort(addr string) (int, error) {
 	return portInt, nil
 }
 
-func getResolverConfig() *resolver.Config {
-	return &resolver.Config{
+func getResolverConfig() resolver.Config {
+	return resolver.Config{
 		Port:     0,
 		LogLevel: slog.LevelInfo,
 		Apis: resolver.ApiConfigs{

@@ -48,6 +48,9 @@
     #publicKeyInput {
       height: 1rem;
     }
+    #messageArea {
+      height: 10rem;
+    }
     .checkbox-container {
       margin-bottom: 10px;
     }
@@ -147,6 +150,22 @@
         log("[KeyExport] Error exporting public key: " + error.message);
       }
     }
+    async function encryptMessage(msg, peerPublicKey) {
+      try {
+        const encoder = new TextEncoder();
+        const encoded = encoder.encode(msg);
+        const ciphertext = await window.crypto.subtle.encrypt(
+          {
+            name: "RSA-OAEP",
+          },
+          peerPublicKey,
+          encoded
+        );
+        return arrayBufferToBase64(ciphertext);
+      } catch (error) {
+        console.error("Error encrypting message:", error);
+      }
+    }
     async function decryptMessage(msg, privateKey) {
       try {
         const decrypted = await window.crypto.subtle.decrypt(
@@ -229,8 +248,9 @@
           const incomingBuffer = new Uint8Array(event.data);
           const incomingMsg = OutgoingMessage.decode(incomingBuffer);
 
-          if (incomingMsg.response && incomingMsg.response.result) {
-            log("[DataChannel] Received ResolverResponse: " + JSON.stringify(incomingMsg.response.result));
+          if (incomingMsg.response && incomingMsg.response.payload) {
+            const payload = new TextDecoder().decode(incomingMsg.response.payload);
+            log("[DataChannel] Received ResolverResponse: " + payload);
           } else if (incomingMsg.error) {
             log("[DataChannel] Received Error: " + incomingMsg.error.message);
           }
@@ -307,7 +327,7 @@
 
     startWebRTC().catch(err => log("Error initializing WebRTC: " + err));
 
-    sendBtn.onclick = () => {
+    sendBtn.onclick = async () => {
       if (!dataChannel || dataChannel.readyState !== "open") {
         log("[Send] Data channel not open.");
         return;
@@ -327,14 +347,23 @@
       let message;
 
       const sendRaw = sendRawCheckbox.checked;
+      const encrypt = encryptCheckbox.checked;
+
       if (sendRaw) {
         message = msg;
       } else {
+        let payload;
+        if (encrypt) {
+          payload = await encryptMessage(msg, pubKey);
+        } else {
+          payload = new TextEncoder().encode(msg);
+        }
+
         const outgoingMsg = IncomingMessage.create({
           request: ResolverRequest.create({
             id: "resolver-request",
-            payload: new TextEncoder().encode(msg),
-            encrypted: false,
+            payload: payload,
+            encrypted: encrypt,
             publicKey: exportedPublicKey,
           }),
           publicKeys: [hexStringToUint8Array(pubKey)]

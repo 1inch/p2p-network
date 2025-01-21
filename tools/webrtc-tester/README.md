@@ -9,3 +9,13 @@ Local Node.js installation with npx and http-server package.
 ```
 npx http-server .
 ```
+
+## Sample message
+
+```
+{
+  "id": "1",
+  "method": "GetWalletBalance",
+  "params": ["0x1234", "latest"]
+}
+```

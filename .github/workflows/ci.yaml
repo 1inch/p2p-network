@@ -32,7 +32,7 @@ jobs:
             node-registry:
               - 'contracts/NodeRegistry.sol'
       - name: Set Outputs as JSON
-#        if: github.ref == 'refs/heads/dev'
+        if: github.ref == 'refs/heads/dev'
         run: |
           echo '{}' | jq \
             --arg configs "${{ steps.changes.outputs.configs }}" \
@@ -40,7 +40,7 @@ jobs:
             '. + {configs: $configs, "node-registry": $node_registry}' \
             > outputs.json
       - name: Upload Changes Artifact
-#        if: github.ref == 'refs/heads/dev'
+        if: github.ref == 'refs/heads/dev'
         uses: actions/upload-artifact@v4
         with:
           name: project-changes

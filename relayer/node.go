@@ -2,6 +2,7 @@
 package relayer
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -174,31 +175,38 @@ func corsMiddleware(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func loggerMiddlewareBeforeServe(logger *slog.Logger, r *http.Request) {
-	logger.Info("receive request", slog.Any("method", r.Method), slog.Any("api", r.URL))
+func loggerMiddlewareBeforeServe(logger *slog.Logger, r *http.Request) *http.Request {
+	// cloned http request because only once can be read request body
+	clonedReq := r.Clone(r.Context())
+	logger.Info("receive request", slog.Any("method", r.Method), slog.Any("api", r.URL.Path))
 	logger.Debug("with request", slog.Any("body", func() string {
 		if r.Body != nil {
-			reqBytes, err := io.ReadAll(r.Body)
+			bodyBytes, err := io.ReadAll(r.Body)
 			if err != nil {
 				logger.Debug("failed get request bytes from reader")
 				return ""
 			}
-			return string(reqBytes)
+
+			clonedReq.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
+			return string(bodyBytes)
 		}
 		return "<nil>"
 	}()))
+
+	return clonedReq
 }
 
 func loggerMiddlewareAfterServe(logger *slog.Logger, r *http.Request) {
-	logger.Info("request process", slog.Any("method", r.Method), slog.Any("api", r.URL))
+	logger.Info("request process", slog.Any("method", r.Method), slog.Any("api", r.URL.Path))
 }
 
 func handlerWithLoggingAndCors(logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		corsMiddleware(w, r)
-		loggerMiddlewareBeforeServe(logger, r)
+		clonedReq := loggerMiddlewareBeforeServe(logger, r)
 
-		next.ServeHTTP(w, r)
-		loggerMiddlewareAfterServe(logger, r)
+		next.ServeHTTP(w, clonedReq)
+		loggerMiddlewareAfterServe(logger, clonedReq)
 	})
 }

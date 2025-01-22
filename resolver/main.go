@@ -167,6 +167,7 @@ func loggingRequestHandler(ctx context.Context, logger *slog.Logger, req interfa
 	}
 
 	return resp, err
+}
 
 // Addr returns the net listener address.
 func (r *Resolver) Addr() string {

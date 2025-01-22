@@ -30,6 +30,7 @@ type Resolver struct {
 	logger           *slog.Logger
 	httpMetricServer *http.Server
 	grpcServer       *grpc.Server
+	lis              net.Listener
 }
 
 // New method for create new instance of Resolver
@@ -71,6 +72,15 @@ func New(cfg Config, logger *slog.Logger) (*Resolver, error) {
 		}))
 
 	resolver.grpcServer = newGrpcServer(logger, server, serverOptions...)
+
+	// Create TCP listener
+	listener, err := net.Listen("tcp", cfg.GrpcEndpoint)
+	if err != nil {
+		logger.Error("Failed to create net listener", slog.Any("err", err.Error()))
+		return nil, err
+	}
+	resolver.lis = listener
+
 	return resolver, nil
 }
 
@@ -106,21 +116,9 @@ func newMetricServer(cfg *Config) *http.Server {
 
 // Run starts gRPC server with provided config
 func (r *Resolver) Run() error {
-	_, port, err := net.SplitHostPort(r.cfg.GrpcEndpoint)
-	if err != nil {
-		r.logger.Error("failed split endpoint")
-		return err
-	}
-	// Create TCP listener
-	listener, err := net.Listen("tcp", fmt.Sprintf("localhost:%s", port))
-	if err != nil {
-		r.logger.Error("failed to listen", slog.Any("err", err))
-		return err
-	}
-
 	go func() {
-		r.logger.Info("listening grpc server", slog.Any("port", port))
-		if err := r.grpcServer.Serve(listener); err != nil {
+		r.logger.Info("listening grpc server", slog.Any("address", r.Addr()))
+		if err := r.grpcServer.Serve(r.lis); err != nil {
 			r.logger.Error("failed to start grpc server", slog.Any("err", err.Error()))
 			return
 		}
@@ -169,4 +167,8 @@ func loggingRequestHandler(ctx context.Context, logger *slog.Logger, req interfa
 	}
 
 	return resp, err
+
+// Addr returns the net listener address.
+func (r *Resolver) Addr() string {
+	return r.lis.Addr().String()
 }

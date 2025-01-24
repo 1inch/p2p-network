@@ -6,6 +6,7 @@ import (
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -14,6 +15,8 @@ import (
 	"github.com/1inch/p2p-network/internal/encryption"
 	pb "github.com/1inch/p2p-network/proto"
 	"github.com/1inch/p2p-network/resolver/types"
+	ecies "github.com/ecies/go/v2"
+	ethCrypto "github.com/ethereum/go-ethereum/crypto"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -72,7 +75,12 @@ func newServer(cfg *Config) (*Server, error) {
 
 	var privKey crypto.PrivateKey
 	if len(cfg.PrivateKey) > 0 {
-		privKey = cfg.PrivateKey
+		privKeyBytes, err := hex.DecodeString(cfg.PrivateKey)
+		if err != nil {
+			logger.Error("error decoding private key hex", slog.Any("err", err))
+			return nil, err
+		}
+		privKey = ecies.NewPrivateKeyFromBytes(privKeyBytes)
 	} else {
 		privKeyGenerated, err := encryption.GenerateKeyPair(encryption.Secp256k1)
 
@@ -109,7 +117,18 @@ func (s *Server) Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.Reso
 	}
 
 	if req.Encrypted {
-		resp, err = encryption.Encrypt(resp, req.PublicKey)
+		pubKeyDecompressed, err := ethCrypto.DecompressPubkey(req.PublicKey)
+		if err != nil {
+			return nil, s.formatGrpcError(response, err)
+		}
+		pubKeyBytes := ethCrypto.FromECDSAPub(pubKeyDecompressed)
+
+		pubKey, err := ecies.NewPublicKeyFromBytes(pubKeyBytes)
+		if err != nil {
+			return nil, s.formatGrpcError(response, err)
+		}
+
+		resp, err = encryption.EncryptV2(resp, pubKey)
 		if err != nil {
 			return nil, s.formatGrpcError(response, err)
 		}

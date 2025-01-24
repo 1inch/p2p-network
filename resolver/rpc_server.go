@@ -77,8 +77,8 @@ func newServer(cfg *Config) (*Server, error) {
 	if len(cfg.PrivateKey) > 0 {
 		privKeyBytes, err := hex.DecodeString(cfg.PrivateKey)
 		if err != nil {
-			logger.Error("expect someone handler api in config")
-			return nil, errNoHandlerApiInConfig
+			logger.Error("error decoding private key hex", slog.Any("err", err))
+			return nil, err
 		}
 		privKey = ecies.NewPrivateKeyFromBytes(privKeyBytes)
 	} else {

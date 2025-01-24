@@ -12,6 +12,7 @@ import (
 	"github.com/1inch/p2p-network/internal/encryption"
 	pb "github.com/1inch/p2p-network/proto"
 	"github.com/1inch/p2p-network/resolver/types"
+	ecies "github.com/ecies/go/v2"
 	gethrpc "github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
@@ -30,6 +31,7 @@ type ResolverTestSuite struct {
 	server *grpc.Server
 
 	resolverPrivateKey crypto.PrivateKey
+	resolverPublicKey  *ecies.PublicKey
 	client             pb.ExecuteClient
 	conn               *grpc.ClientConn
 }
@@ -48,6 +50,13 @@ func (s *ResolverTestSuite) SetupTest() {
 	}
 
 	s.resolverPrivateKey = server.privateKey
+
+	eciesKey, ok := s.resolverPrivateKey.(*ecies.PrivateKey)
+	if !ok {
+		s.Fail("incorrect key format")
+	}
+
+	s.resolverPublicKey = eciesKey.PublicKey
 
 	grpcServer := newGrpcServer(logger, server)
 	go func() {
@@ -129,17 +138,12 @@ type negativeTestCase struct {
 func (s *ResolverTestSuite) TestExecuteEncrypted() {
 	relayerKey, err := encryption.GenerateKeyPair(encryption.Secp256k1)
 	s.Require().NoError(err)
-	relayerPEM, err := encryption.ToPEM(relayerKey)
+	relayerPubKey := relayerKey.(*ecies.PrivateKey).PublicKey.Bytes(true)
+
+	encryptedPayload, err := encryption.EncryptV2(s.getWalletBalancePayloadOk(), s.resolverPublicKey)
 	s.Require().NoError(err)
 
-	resolverPEM, err := encryption.ToPEM(s.resolverPrivateKey)
-	s.Require().NoError(err)
-	s.Require().NotNil(resolverPEM)
-
-	encryptedPayload, err := encryption.Encrypt(s.getWalletBalancePayloadOk(), resolverPEM)
-	s.Require().NoError(err)
-
-	req := &pb.ResolverRequest{Id: "1", Payload: encryptedPayload, Encrypted: true, PublicKey: relayerPEM}
+	req := &pb.ResolverRequest{Id: "1", Payload: encryptedPayload, Encrypted: true, PublicKey: relayerPubKey}
 
 	slog.Info("###about to execute")
 	resp, err := s.client.Execute(context.Background(), req)

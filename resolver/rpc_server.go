@@ -117,11 +117,11 @@ func (s *Server) Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.Reso
 	}
 
 	if req.Encrypted {
-		pubKeyDEcompressed, err := ethCrypto.DecompressPubkey(req.PublicKey)
+		pubKeyDecompressed, err := ethCrypto.DecompressPubkey(req.PublicKey)
 		if err != nil {
 			return nil, s.formatGrpcError(response, err)
 		}
-		pubKeyBytes := ethCrypto.FromECDSAPub(pubKeyDEcompressed)
+		pubKeyBytes := ethCrypto.FromECDSAPub(pubKeyDecompressed)
 
 		pubKey, err := ecies.NewPublicKeyFromBytes(pubKeyBytes)
 		if err != nil {

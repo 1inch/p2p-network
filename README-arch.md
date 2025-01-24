@@ -38,10 +38,10 @@ sequenceDiagram
     resolver->>discovery: registerResolver
     discovery-->>resolver: success
     sdk->>discovery: getRelayer
-    discovery-->>sdk: relayer IP
-    sdk->>discovery: getResolver
-    discovery-->>sdk: resolver PublicKey
+    discovery-->>sdk: relayer IP + resolver public Keys
     sdk->>relayer: ExecuteRequest (WebRTC)
+    relayer->>discovery: getResolver
+    discovery-->>relayer: resolver's IP
     relayer->>resolver: ExecuteRequest (gRPC)
     resolver-->>relayer: ExecuteResponse (gRPC)
     relayer-->>sdk: ExecuteResponse (WebRTC)
@@ -79,8 +79,20 @@ classDiagram
         payload: bytes
         encrypted: bool
     }
+    class IncomingMessage {
+        <<protobuf>>
+        publicKeys: bytes
+        request: ResolverRequest
+    }
+    class OutgoingMessage {
+        <<protobuf>>
+        response: ResolverResponse
+        error: Error
+    }
     JsonRequest --o ResolverRequest
     JsonResponse --o ResolverResponse
+    ResolverRequest --o IncomingMessage
+    ResolverResponse --o OutgoingMessage
 ```
 
 ## dApp SDK
@@ -118,8 +130,8 @@ Discovery service is a Ethereum smart contract that provides the following funct
 
 - relayer registration (**registerRelayer(ip)**)
 - resolver registration (**registerResolver(ip, pubKey)**)
-- getting relayers (**getResolver()**)
-- fetching resolvers by public key (**getResolver(pubKey)**)
+- getting relayer and resolver public keys (**getRelayer()**)
+- fetching resolver IPs by public key (**getResolver(pubKey)**)
 
 
 

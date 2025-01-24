@@ -17,6 +17,7 @@ golang-deps:
 	@go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 	@go install github.com/ethereum/go-ethereum/cmd/abigen@latest
+	@go install go.uber.org/mock/mockgen@latest
 
 protobuf:
 	protoc -I=./proto --go_out=./proto --go-grpc_out=./proto proto/*.proto
@@ -24,11 +25,12 @@ protobuf:
 resolver:
 	go run ./resolver
 
-.PHONY: build_relayer build_resolver
-build_relayer:
+.PHONY: build_relayer_local
+build_relayer_local:
 	@go build -o bin/relayer ./cmd/relayer/
 
-build_resolver:
+.PHONY: build_resolver_local
+build_resolver_local:
 	@go build -o bin/resolver ./cmd/resolver/
 
 .PHONY: build
@@ -37,6 +39,10 @@ build: build_relayer build_resolver
 .PHONY: generate_bindings
 generate_bindings:
 	@go generate -x ./contracts
+
+.PHONY: generate_mocks
+generate_mocks:
+	@go generate -x -run="mockgen" ./...
 
 .PHONY: clean_build
 clean_build: clean protobuf build
@@ -93,7 +99,7 @@ start-anvil:
 		echo "Anvil binary not found"; \
 	elif ! pgrep -x "anvil" > /dev/null; then \
 		echo "Starting anvil on port 8545"; \
-		anvil & \
+		anvil --accounts 21 & \
 		timeout 5 sh -c 'until nc -z localhost 8545; do sleep 1; done' || (echo "Anvil failed to start." && exit 1); \
 	else \
 		echo "Anvil is already running"; \

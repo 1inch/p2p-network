@@ -14,6 +14,12 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+var grpcClientConfig = `{
+	"healthCheckConfig": {
+		"serviceName": ""
+	}
+}`
+
 var (
 	// ErrResolverLookupFailed is returned when the registry client fails to resolve a public key.
 	ErrResolverLookupFailed = errors.New("resolver lookup failed")
@@ -86,7 +92,9 @@ func (c *Client) getConn(publicKey []byte) (*grpc.ClientConn, error) {
 		return nil, fmt.Errorf("%w: publicKey %s: %w", ErrResolverLookupFailed, hex.EncodeToString(publicKey), err)
 	}
 
-	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(address,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultServiceConfig(grpcClientConfig))
 	if err != nil {
 		return nil, err
 	}

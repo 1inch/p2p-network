@@ -14,6 +14,8 @@ import (
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	grpchealth "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/stats/opentelemetry"
 )
@@ -26,6 +28,7 @@ type Resolver struct {
 	logger           *slog.Logger
 	httpMetricServer *http.Server
 	grpcServer       *grpc.Server
+	lis              net.Listener
 }
 
 // New method for create new instance of Resolver
@@ -62,13 +65,26 @@ func New(cfg Config, logger *slog.Logger) (*Resolver, error) {
 	}
 
 	resolver.grpcServer = newGrpcServer(logger, server)
+
+	// Create TCP listener
+	listener, err := net.Listen("tcp", cfg.GrpcEndpoint)
+	if err != nil {
+		logger.Error("Failed to create net listener", slog.Any("err", err.Error()))
+		return nil, err
+	}
+	resolver.lis = listener
+
 	return resolver, nil
 }
 
 func newGrpcServer(logger *slog.Logger, server *Server, opts ...grpc.ServerOption) *grpc.Server {
 	grpcServer := grpc.NewServer(opts...)
+	healthServer := health.NewServer()
 
 	pb.RegisterExecuteServer(grpcServer, server)
+	grpchealth.RegisterHealthServer(grpcServer, healthServer)
+
+	// TODO maybe need make this turn on/off by configuration?
 	reflection.Register(grpcServer)
 
 	serviceInfo := grpcServer.GetServiceInfo()
@@ -93,16 +109,9 @@ func newMetricServer(cfg *Config) *http.Server {
 
 // Run starts gRPC server with provided config
 func (r *Resolver) Run() error {
-	// Create TCP listener
-	listener, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", r.cfg.Port))
-	if err != nil {
-		r.logger.Error("failed to listen", slog.Any("err", err))
-		return err
-	}
-
 	go func() {
-		r.logger.Info("Listening grpc server", slog.Any("port", r.cfg.Port))
-		if err := r.grpcServer.Serve(listener); err != nil {
+		r.logger.Info("Listening grpc server", slog.Any("address", r.Addr()))
+		if err := r.grpcServer.Serve(r.lis); err != nil {
 			r.logger.Error("Failed to start grpc server", slog.Any("err", err.Error()))
 			return
 		}
@@ -134,4 +143,9 @@ func (r *Resolver) Stop() error {
 		}
 	}
 	return nil
+}
+
+// Addr returns the net listener address.
+func (r *Resolver) Addr() string {
+	return r.lis.Addr().String()
 }

@@ -38,10 +38,21 @@ func GenerateKeyPair(keyType string) (crypto.PrivateKey, error) {
 // Encrypt encrypts payload using public key PEM
 func Encrypt(payload []byte, pemBytes []byte) ([]byte, error) {
 	pub, err := FromPEM(pemBytes)
-
 	if err != nil {
 		return nil, err
 	}
+	switch v := pub.(type) {
+	case *ecies.PublicKey:
+		return ecies.Encrypt(v, payload)
+	case *rsa.PublicKey:
+		return rsa.EncryptOAEP(sha256.New(), rand.Reader, v, payload, nil)
+	default:
+		return nil, nil
+	}
+}
+
+// EncryptV2 encrypts payload using compressed public key
+func EncryptV2(payload []byte, pub crypto.PublicKey) ([]byte, error) {
 	switch v := pub.(type) {
 	case *ecies.PublicKey:
 		return ecies.Encrypt(v, payload)

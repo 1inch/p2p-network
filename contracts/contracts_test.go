@@ -38,6 +38,8 @@ func TestRegisterResolver(t *testing.T) {
 	rpcURL := "http://127.0.0.1:8545"
 	resolverPrivateKey := "5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
 
+	t.Logf("discovery mock contract address: %s", contractAddr)
+
 	privKey, err := crypto.HexToECDSA(resolverPrivateKey)
 	require.NoError(t, err, "invalid private key")
 	resolverPublicKeyBytes := crypto.CompressPubkey(&privKey.PublicKey)
@@ -56,4 +58,5 @@ func TestRegisterResolver(t *testing.T) {
 	require.NoError(t, err, "contract get relayer failed")
 
 	require.Equal(t, resolverIP, ip)
+	t.Log("resolver successful registered")
 }

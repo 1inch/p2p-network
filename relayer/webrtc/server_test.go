@@ -27,7 +27,7 @@ func TestWebRTCServer_HandleSDP(t *testing.T) {
 	mockGRPCClient := mocks.NewMockGRPCClient(ctrl)
 	mockGRPCClient.EXPECT().Close().AnyTimes()
 
-	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
+	server, err := relayerwebrtc.New(relayerwebrtc.RetryConfig{}, logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
 	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{
@@ -84,7 +84,7 @@ func TestWebRTCServer_Run_CleanupOnContextCancel(t *testing.T) {
 	mockGRPCClient := mocks.NewMockGRPCClient(ctrl)
 	mockGRPCClient.EXPECT().Close().Return(nil)
 
-	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
+	server, err := relayerwebrtc.New(relayerwebrtc.RetryConfig{}, logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
 	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
@@ -142,7 +142,7 @@ func TestWebRTCServer_Run_Shutdown(t *testing.T) {
 	mockGRPCClient := mocks.NewMockGRPCClient(ctrl)
 	mockGRPCClient.EXPECT().Close().Return(nil)
 
-	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
+	server, err := relayerwebrtc.New(relayerwebrtc.RetryConfig{}, logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -268,7 +268,7 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 			mockGRPCClient := mocks.NewMockGRPCClient(ctrl)
 			tc.setupMock(mockGRPCClient)
 
-			server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
+			server, err := relayerwebrtc.New(relayerwebrtc.RetryConfig{}, logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
 			assert.NoError(t, err, "Failed to create WebRTC server")
 
 			peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})

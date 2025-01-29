@@ -56,6 +56,7 @@ type ICECandidate struct {
 
 // Server wraps the webrtc.Server.
 type Server struct {
+	cfg           RetryConfig
 	logger        *slog.Logger
 	ICEServer     string
 	grpcClient    GRPCClient
@@ -68,6 +69,7 @@ type Server struct {
 
 // New initializes a new WebRTC server.
 func New(
+	cfg RetryConfig,
 	logger *slog.Logger,
 	iceServer string,
 	client GRPCClient,
@@ -80,6 +82,7 @@ func New(
 	}
 
 	return &Server{
+		cfg:           cfg,
 		sdpRequests:   sdpRequests,
 		iceCandidates: iceICECandidates,
 		ICEServer:     iceServer,
@@ -270,59 +273,31 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 
 		w.logger.Debug("received message", slog.Any("request", message.Request), slog.String("publicKeys", fmt.Sprintf("%x", message.PublicKeys)))
 
-		var wg sync.WaitGroup
+		respMessageChan := make(chan *pb.OutgoingMessage, 1)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
 		for _, publicKey := range message.PublicKeys {
-			wg.Add(1)
-			go func(publicKey []byte) {
-				defer wg.Done()
-
-				response, err := w.grpcClient.Execute(context.Background(), publicKey, message.Request)
-				if err != nil {
-					var errorCode, errorMsg = mapErrorToCodeAndMessage(err)
-
-					respMessage := &pb.OutgoingMessage{
-						Result: &pb.OutgoingMessage_Error{
-							Error: &pb.Error{
-								Code:    errorCode,
-								Message: errorMsg,
-							},
-						},
-						PublicKey: publicKey,
-					}
-					w.logger.Error("failed to execute gRPC request", slog.Any("err", err))
-					if sendErr := w.sendResponse(dc, respMessage); sendErr != nil {
-						w.logger.Error("failed to send error response", slog.Any("err", sendErr))
-					}
-					return
-				}
-
-				respMessage := &pb.OutgoingMessage{
-					Result: &pb.OutgoingMessage_Response{
-						Response: response,
-					},
-					PublicKey: publicKey,
-				}
-
-				w.logger.Debug("sending response", slog.Any("response", response), slog.String("publicKey", fmt.Sprintf("%x", publicKey)))
-
-				if err := w.sendResponse(dc, respMessage); err != nil {
-					respMessage := &pb.OutgoingMessage{
-						Result: &pb.OutgoingMessage_Error{
-							Error: &pb.Error{
-								Code:    pb.ErrorCode_ERR_DATA_CHANNEL_SEND_FAILED,
-								Message: fmt.Sprintf("Failed to send response: %v", err),
-							},
-						},
-						PublicKey: publicKey,
-					}
-					w.logger.Error("failed to send response", slog.Any("err", err))
-					if sendErr := w.sendResponse(dc, respMessage); sendErr != nil {
-						w.logger.Error("failed to send data channel error response", slog.Any("err", sendErr))
-					}
-				}
-			}(publicKey)
+			go w.retryGetResponseFromResolver(ctx, cancel, publicKey, message.Request, respMessageChan)
 		}
-		wg.Wait()
+
+		respMessage := <-respMessageChan
+
+		if err := w.sendResponse(dc, respMessage); err != nil {
+			respMessage := &pb.OutgoingMessage{
+				Result: &pb.OutgoingMessage_Error{
+					Error: &pb.Error{
+						Code:    pb.ErrorCode_ERR_DATA_CHANNEL_SEND_FAILED,
+						Message: fmt.Sprintf("Failed to send response: %v", err),
+					},
+				},
+				PublicKey: respMessage.PublicKey,
+			}
+			w.logger.Error("failed to send response", slog.Any("err", err))
+			if sendErr := w.sendResponse(dc, respMessage); sendErr != nil {
+				w.logger.Error("failed to send data channel error response", slog.Any("err", sendErr))
+			}
+		}
 	})
 }
 
@@ -386,4 +361,85 @@ func mapErrorToCodeAndMessage(err error) (pb.ErrorCode, string) {
 		return pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED, fmt.Sprintf("grpc execution failed: %s", err.Error())
 	}
 	return pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED, fmt.Sprintf("unexpected error: %s", err.Error())
+}
+
+func (w *Server) retryGetResponseFromResolver(ctx context.Context, cancelFunc context.CancelFunc, publicKey []byte, request *pb.ResolverRequest, respChan chan *pb.OutgoingMessage) {
+	for attempt := range w.cfg.RequestCount {
+		select {
+		// check ctx is done, it means that someone goroutine already put response in chan
+		case <-ctx.Done():
+			{
+				w.logger.Info("another resolver faster return response")
+				break
+			}
+		// if ctx doesnt done, there is an next attempt get some response from resolvers
+		default:
+			{
+				w.logger.Debug("try get response from resolver", slog.Any("attempt", attempt+1), slog.Any("publicKey", string(publicKey)))
+				resp := w.tryGetResponseFromResolver(publicKey, request)
+
+				// if response without error, there is break cycle for attempts and put the message in chan
+				if resp.GetError() == nil {
+					w.logger.Info("success response from resolver")
+					w.logger.Debug("response from resolver without error, put it in channel", slog.Any("publicKey", string(publicKey)))
+					break
+				}
+
+				// But if response with error, check which error that, start sleep and continue cycle for attempts
+				switch {
+				case w.isErrorForRetry(resp.GetError().Code):
+					{
+						w.logger.Debug("resolver returned supported error for retry")
+						w.logger.Debug("start sleep for interval", slog.Any("time_duration", w.cfg.RequestInterval))
+						time.Sleep(w.cfg.RequestInterval)
+						continue
+					}
+				// there is no point retry get some response from resolvers, because nothing will change
+				// for example, error when dapps send request with not supported method in api handler
+				default:
+					{
+						w.logger.Error("unsupported error from resolver, retry is not possible", slog.Any("err", resp.GetError().Message))
+						break
+					}
+				}
+
+				respChan <- resp
+				cancelFunc()
+			}
+		}
+	}
+}
+
+func (w *Server) isErrorForRetry(errorCode pb.ErrorCode) bool {
+	return errorCode == pb.ErrorCode_ERR_DATA_CHANNEL_SEND_FAILED ||
+		errorCode == pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED ||
+		errorCode == pb.ErrorCode_ERR_RESOLVER_LOOKUP_FAILED
+}
+
+func (w *Server) tryGetResponseFromResolver(publicKey []byte, request *pb.ResolverRequest) *pb.OutgoingMessage {
+	var respMessage *pb.OutgoingMessage
+	response, err := w.grpcClient.Execute(context.Background(), publicKey, request)
+	if err != nil {
+		var errorCode, errorMsg = mapErrorToCodeAndMessage(err)
+
+		respMessage = &pb.OutgoingMessage{
+			Result: &pb.OutgoingMessage_Error{
+				Error: &pb.Error{
+					Code:    errorCode,
+					Message: errorMsg,
+				},
+			},
+			PublicKey: publicKey,
+		}
+		w.logger.Error("failed to execute gRPC request", slog.Any("err", err))
+	} else {
+		respMessage = &pb.OutgoingMessage{
+			Result: &pb.OutgoingMessage_Response{
+				Response: response,
+			},
+			PublicKey: publicKey,
+		}
+	}
+
+	return respMessage
 }

@@ -59,6 +59,13 @@ func main() {
 					ctx, cancel := context.WithCancel(context.Background())
 					defer cancel()
 
+					if cfg.WithNodeRegistry {
+						err := node.RegisterRelayer(ctx)
+						if err != nil {
+							logger.Error("failed to register relayer node", slog.Any("err", err))
+						}
+					}
+
 					go handleInterrupt(cancel)
 
 					if err := node.Run(ctx); err != nil {

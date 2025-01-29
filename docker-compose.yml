@@ -24,22 +24,22 @@ services:
     networks:
       - fullstack
 
-  relayer:
-    container_name: relayer
-    build:
-      context: .
-      target: relayer
-      dockerfile: ./relayer/Dockerfile
-    volumes:
-      - "./assets/relayer.config.yaml:/app/config.yaml"
-    entrypoint: ["/bin/sh", "-c", "./main run --config config.yaml"]
-    depends_on:
-      deploy-contract:
-        condition: service_completed_successfully
-    ports:
-      - "8080:8080"
-    networks:
-      - fullstack
+  # relayer:
+  #   container_name: relayer
+  #   build:
+  #     context: .
+  #     target: relayer
+  #     dockerfile: ./relayer/Dockerfile
+  #   volumes:
+  #     - "./assets/relayer.config.yaml:/app/config.yaml"
+  #   entrypoint: ["/bin/sh", "-c", "./main run --config config.yaml"]
+  #   depends_on:
+  #     deploy-contract:
+  #       condition: service_completed_successfully
+  #   ports:
+  #     - "8080:8080"
+  #   networks:
+  #     - fullstack
 
   resolver:
     container_name: resolver

@@ -56,7 +56,7 @@ type ICECandidate struct {
 
 // Server wraps the webrtc.Server.
 type Server struct {
-	cfg           RetryConfig
+	cfg           RetryRequestConfig
 	logger        *slog.Logger
 	ICEServer     string
 	grpcClient    GRPCClient
@@ -69,7 +69,7 @@ type Server struct {
 
 // New initializes a new WebRTC server.
 func New(
-	cfg RetryConfig,
+	cfg RetryRequestConfig,
 	logger *slog.Logger,
 	iceServer string,
 	client GRPCClient,
@@ -364,7 +364,17 @@ func mapErrorToCodeAndMessage(err error) (pb.ErrorCode, string) {
 }
 
 func (w *Server) retryGetResponseFromResolver(ctx context.Context, cancelFunc context.CancelFunc, publicKey []byte, request *pb.ResolverRequest, respChan chan *pb.OutgoingMessage) {
-	for attempt := range w.cfg.RequestCount {
+	w.logger.Debug("start request to resolver", slog.Any("public_key", string(publicKey)))
+
+	retryRequest := w.cfg.Count
+	requestSleepInterval := w.cfg.Interval
+	if !w.cfg.Enabled {
+		w.logger.Debug("retry requests is disabled, set parameters for one attempt")
+		retryRequest = 1
+		requestSleepInterval = time.Duration(0)
+	}
+
+	for attempt := range retryRequest {
 		select {
 		// check ctx is done, it means that someone goroutine already put response in chan
 		case <-ctx.Done():
@@ -390,8 +400,8 @@ func (w *Server) retryGetResponseFromResolver(ctx context.Context, cancelFunc co
 				case w.isErrorForRetry(resp.GetError().Code):
 					{
 						w.logger.Debug("resolver returned supported error for retry")
-						w.logger.Debug("start sleep for interval", slog.Any("time_duration", w.cfg.RequestInterval))
-						time.Sleep(w.cfg.RequestInterval)
+						w.logger.Debug("start sleep for interval", slog.Any("time_duration", requestSleepInterval))
+						time.Sleep(requestSleepInterval)
 						continue
 					}
 				// there is no point retry get some response from resolvers, because nothing will change

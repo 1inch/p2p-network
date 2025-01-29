@@ -369,10 +369,12 @@ func (w *Server) retryGetResponseFromResolver(ctx context.Context, cancelFunc co
 	retryRequest := w.cfg.Count
 	requestSleepInterval := w.cfg.Interval
 	if !w.cfg.Enabled {
-		w.logger.Debug("retry requests is disabled, set parameters for one attempt")
+		w.logger.Debug("retry requests is disabled, set parameters for one")
 		retryRequest = 1
 		requestSleepInterval = time.Duration(0)
 	}
+
+	resp := &pb.OutgoingMessage{}
 
 	for attempt := range retryRequest {
 		select {
@@ -386,7 +388,7 @@ func (w *Server) retryGetResponseFromResolver(ctx context.Context, cancelFunc co
 		default:
 			{
 				w.logger.Debug("try get response from resolver", slog.Any("attempt", attempt+1), slog.Any("publicKey", string(publicKey)))
-				resp := w.tryGetResponseFromResolver(publicKey, request)
+				resp = w.tryGetResponseFromResolver(publicKey, request)
 
 				// if response without error, there is break cycle for attempts and put the message in chan
 				if resp.GetError() == nil {
@@ -412,12 +414,12 @@ func (w *Server) retryGetResponseFromResolver(ctx context.Context, cancelFunc co
 						break
 					}
 				}
-
-				respChan <- resp
-				cancelFunc()
 			}
 		}
 	}
+
+	respChan <- resp
+	cancelFunc()
 }
 
 func (w *Server) isErrorForRetry(errorCode pb.ErrorCode) bool {

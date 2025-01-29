@@ -351,3 +351,15 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 		})
 	}
 }
+
+func TestRetryWithError(t *testing.T) {
+
+}
+
+func TestSendRequestToManyResolvers(t *testing.T) {
+
+}
+
+func TestFirstResolverResponseWithErrorSecondSuccess(t *testing.T) {
+
+}

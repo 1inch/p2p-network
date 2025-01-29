@@ -78,119 +78,296 @@
   <textarea id="messageArea" placeholder="Enter message..."></textarea>
   <button id="sendBtn">Send</button>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js" integrity="sha512-EHe9bE7YtRkBvh/3qnO65Wn3JgMjOonF6wO6Xc7dygWNm12jRfmC5pVXlVUgP0bGZ0Elhjx+EMKK1Ujr0YvR3A==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="//cdn.jsdelivr.net/npm/protobufjs@7.X.X/dist/protobuf.min.js"></script>
   <script src="relayer_bundle.js"></script>
+  <script src="elliptic.min.js"></script>
 
   <script>
-    function hexStringToUint8Array(hex) {
-      hex = hex.replace(/[^0-9a-fA-F]/g, '');
-      if (hex.length % 2 !== 0) {
-          hex = '0' + hex;
-      }
-      const byteLength = hex.length / 2;
-      const bytes = new Uint8Array(byteLength);
+    const EC = elliptic.ec;
+    const ec = new EC('secp256k1'); 
+    const keyPair = ec.genKeyPair();
+    const publicKeyCompressed = keyPair.getPublic(true, 'hex');
 
-      for (let i = 0; i < byteLength; i++) {
-          bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
-      }
-
-      return bytes;
+    ////////// ECDSA //////////
+    function uint8ArrayToHex(bytes) {
+      return Array.from(bytes)
+        .map(byte => byte.toString(16).padStart(2, '0'))
+        .join('');
     }
-    async function generateRSAKeyPair() {
+
+    function hexToUint8Array(hex) {
+      if (hex.length % 2 !== 0) throw new Error("Invalid hex string.");
+      const array = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < array.length; i++) {
+        array[i] = parseInt(hex.substr(i * 2, 2), 16);
+      }
+      return array;
+    }
+
+    function decompressPublicKey(compressedKeyHex) {
       try {
-        const keyPair = await window.crypto.subtle.generateKey(
-          {
-            name: "RSA-OAEP",
-            modulusLength: 2048,
-            publicExponent: new Uint8Array([0x01, 0x00, 0x01]),
-            hash: "SHA-256",
-          },
-          true,
-          ["encrypt", "decrypt"]
+        const key = ec.keyFromPublic(compressedKeyHex, 'hex');
+        const uncompressedKeyHex = key.getPublic(false, 'hex'); 
+        return key;
+      } catch (error) {
+        log(`Error decompressing public key: ${error.message}`);
+        return null;
+      }
+    }
+
+    function generateEphemeralKeyPair() {
+      const ephemeralKeyPair = ec.genKeyPair();
+      log("[Encrypt] Ephemeral key pair generated.");
+      return ephemeralKeyPair;
+    }
+
+    function deriveSharedSecretEncrypt(senderEphemeralKeyPair, receiverPublicKey) {
+      try {
+        // Perform scalar multiplication to get the shared point
+        const sharedPoint = receiverPublicKey.getPublic().mul(senderEphemeralKeyPair.getPrivate()); 
+
+        // Get x and y coordinates as byte arrays (32 bytes each)
+        const x = sharedPoint.getX().toArray('be', 32);
+        const y = sharedPoint.getY().toArray('be', 32);
+
+        // Serialize ephemeral public key in uncompressed format (65 bytes)
+        const ephemeralPubKeyUncompressedHex = senderEphemeralKeyPair.getPublic(false, 'hex');
+        const ephemeralPubKeyBytes = hexToUint8Array(ephemeralPubKeyUncompressedHex);
+
+        // Assemble the 130-byte shared secret buffer
+        const buffer = new Uint8Array(65 + 1 + 32 + 32);
+        buffer.set(ephemeralPubKeyBytes, 0);
+        buffer.set([0x04], 65);
+        buffer.set(x, 66);
+        buffer.set(y, 98);
+
+        log("[Encrypt] Derived Shared Secret (130 bytes).");
+        return buffer;
+      } catch (error) {
+        log(`[Encrypt] Error deriving shared secret: ${error.message}`);
+        return null;
+      }
+    }
+
+    function deriveSharedSecretDecrypt(receiverEphemeralPublicKey, senderKeyPair) {
+      try {
+        // Perform scalar multiplication to get the shared point
+        const sharedPoint = receiverEphemeralPublicKey.getPublic().mul(senderKeyPair.getPrivate());
+
+        // Extract x and y coordinates (32 bytes each)
+        const x = sharedPoint.getX().toArray('be', 32);
+        const y = sharedPoint.getY().toArray('be', 32);
+
+        // Serialize sender's ephemeral public key in uncompressed format (65 bytes)
+        const ephemeralPubKeyUncompressedHex = receiverEphemeralPublicKey.getPublic(false, 'hex');
+        const ephemeralPubKeyBytes = hexToUint8Array(ephemeralPubKeyUncompressedHex);
+
+        // Assemble the 130-byte shared secret buffer
+        const buffer = new Uint8Array(65 + 1 + 32 + 32);
+        buffer.set(ephemeralPubKeyBytes, 0);
+        buffer.set([0x04], 65);             
+        buffer.set(x, 66);                
+        buffer.set(y, 98);
+
+        log("[Decrypt] Derived Shared Secret (130 bytes).");
+        return buffer;
+      } catch (error) {
+        log(`[Decrypt] Error deriving shared secret: ${error.message}`);
+        return null;
+      }
+    }
+
+    async function deriveSymmetricKeyHKDF(sharedSecretBuffer) {
+      try {
+        // Import the shared secret as a key for HKDF
+        const hkdfKey = await crypto.subtle.importKey(
+          'raw',
+          sharedSecretBuffer,
+          { name: 'HKDF' },
+          false,
+          ['deriveKey']
         );
-        console.log("RSA Key Pair Generated.");
-        return keyPair;
+
+        // Derive the AES-GCM key using HKDF with SHA-256, no salt, no info
+        const derivedKey = await crypto.subtle.deriveKey(
+          {
+            name: 'HKDF',
+            hash: 'SHA-256',
+            salt: new Uint8Array([]),
+            info: new Uint8Array([])
+          },
+          hkdfKey,
+          { name: 'AES-GCM', length: 256 },
+          true,
+          ['encrypt', 'decrypt']
+        );
+
+        return derivedKey;
       } catch (error) {
-        console.error("Error generating RSA key pair:", error);
+        log(`Error deriving symmetric key via HKDF: ${error.message}`);
+        return null;
       }
     }
-    function ab2str(buf) {
-      return String.fromCharCode.apply(null, new Uint8Array(buf));
-    }
-    function pemToArrayBuffer(pem) {
-      // Do i need to remove this?
-      const pemHeader = "-----BEGIN PUBLIC KEY-----";
-      const pemFooter = "-----END PUBLIC KEY-----";
-      const pemContents = pem.substring(
-        pem.indexOf(pemHeader) + pemHeader.length,
-        pem.indexOf(pemFooter)
-      ).replace(/\s+/g, ''); 
 
-      const binaryString = window.atob(pemContents);
+    function assembleEncryptedMessage(ephemeralPubKeyHex, nonce, tag, ciphertext) {
+      const ephemeralPubKeyBytes = hexToUint8Array(ephemeralPubKeyHex);
+      const messageBytes = new Uint8Array(
+        ephemeralPubKeyBytes.length + nonce.length + tag.length + ciphertext.length
+      );
 
-      const len = binaryString.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
+      // Concatenate the parts: ephemeralPubKey + nonce + tag + ciphertext
+      messageBytes.set(ephemeralPubKeyBytes, 0);
+      messageBytes.set(nonce, ephemeralPubKeyBytes.length);
+      messageBytes.set(tag, ephemeralPubKeyBytes.length + nonce.length);
+      messageBytes.set(ciphertext, ephemeralPubKeyBytes.length + nonce.length + tag.length);
 
-      return bytes.buffer;
+      return messageBytes;
     }
-    async function exportPublicKey(key) {
-      try {
-        const exported = await window.crypto.subtle.exportKey("spki", key);
-        const exportedAsString = ab2str(exported);
-        const exportedAsBase64 = window.btoa(exportedAsString);
-        const pemExported = `-----BEGIN PUBLIC KEY-----\n${exportedAsBase64}\n-----END PUBLIC KEY-----`;
-        log(`[KeyExport] Public Key Exported: ${pemExported}`);
-        const exportedBytes = pemToArrayBuffer(pemExported);
-        return exportedBytes;
-      } catch (error) {
-        log("[KeyExport] Error exporting public key: " + error.message);
-      }
-    }
-    async function encryptMessage(msg, peerPublicKey) {
+
+    async function encryptMessage(message, symmetricKey) {
       try {
         const encoder = new TextEncoder();
-        const encoded = encoder.encode(msg);
-        const ciphertext = await window.crypto.subtle.encrypt(
+        const encodedMessage = encoder.encode(message);
+
+        const iv = crypto.getRandomValues(new Uint8Array(16));
+
+        // Encrypt the message
+        const ciphertextBuffer = await crypto.subtle.encrypt(
           {
-            name: "RSA-OAEP",
+            name: 'AES-GCM',
+            iv: iv
           },
-          peerPublicKey,
-          encoded
+          symmetricKey,
+          encodedMessage
         );
-        return arrayBufferToBase64(ciphertext);
+
+        const ciphertextAndTag = new Uint8Array(ciphertextBuffer);
+
+        if (ciphertextAndTag.length < 16) {
+          throw new Error("Ciphertext is too short.");
+        }
+
+        // Split ciphertext and tag
+        const tag = ciphertextAndTag.slice(ciphertextAndTag.length - 16);
+        const ciphertext = ciphertextAndTag.slice(0, ciphertextAndTag.length - 16);
+
+        log("[Encrypt] Message encrypted successfully.");
+        return { ciphertext: ciphertext, tag: tag, iv: iv };
       } catch (error) {
-        console.error("Error encrypting message:", error);
-      }
-    }
-    async function decryptMessage(msg, privateKey) {
-      try {
-        const decrypted = await window.crypto.subtle.decrypt(
-          {
-            name: "RSA-OAEP",
-          },
-          privateKey,
-          msg
-        );
-        const decoder = new TextDecoder();
-        const decryptedMsg = decoder.decode(decrypted);
-        log("[Decryption] Data decrypted.", decryptedMsg);
-        return decryptedMsg;
-      } catch (error) {
-        log("[Decryption] Error decrypting data: " + error.message);
-      }
-    }
-    async function initializeKeys() {
-      rsaKeyPair = await generateRSAKeyPair();
-      if (rsaKeyPair) {
-        exportedPublicKey = await exportPublicKey(rsaKeyPair.publicKey);
-        log("[Initialization] RSA Key Pair Initialized.");
+        log(`[Encrypt] Error encrypting message: ${error.message}`);
+        return null;
       }
     }
 
+    async function decryptMessage(message, symmetricKey) {
+      try {
+        const iv = message.slice(65, 65 + 16);
+        const tag = message.slice(65 + 16, 65 + 16 + 16);
+        const ciphertext = message.slice(65 + 16 + 16);
+
+        const ciphertextWithTag = new Uint8Array(ciphertext.length + tag.length);
+        ciphertextWithTag.set(ciphertext, 0);
+        ciphertextWithTag.set(tag, ciphertext.length);
+
+        // Decrypt the message
+        const decryptedArrayBuffer = await crypto.subtle.decrypt(
+          {
+            name: 'AES-GCM',
+            iv: iv.buffer
+          },
+          symmetricKey,
+          ciphertextWithTag
+        );
+
+        const decryptedBytes = new Uint8Array(decryptedArrayBuffer);
+        const decoder = new TextDecoder();
+        const plaintext = decoder.decode(decryptedBytes);
+
+        log("[Decrypt] Message decrypted successfully.");
+        return plaintext;
+      } catch (error) {
+        log(`[Decrypt] Error decrypting message: ${error.message}`);
+        return null;
+      }
+    }
+
+    async function encryptPayload(recipientPubKeyHex, message) {
+      try {
+        // Decompress recipient's public key
+        const recipientKey = decompressPublicKey(recipientPubKeyHex);
+        if (!recipientKey) {
+          log("Failed to decompress recipient's public key.");
+          return null;
+        }
+        
+        // Generate ephemeral key pair
+        const ephemeralKeyPair = generateEphemeralKeyPair();
+        
+        // Derive shared secret
+        const sharedSecret = deriveSharedSecretEncrypt(ephemeralKeyPair, recipientKey);
+        if (!sharedSecret) {
+          log("[Encrypt] Failed to derive shared secret.");
+          return null;
+        }
+        
+        log("[Encrypt] Deriving Symmetric Key using HKDF.");
+        const symmetricKey = await deriveSymmetricKeyHKDF(sharedSecret);
+        if (!symmetricKey) {
+          log("[Encrypt] Failed to derive symmetric key.");
+          return null;
+        }
+        
+        // Encrypt the message
+        const encrypted = await encryptMessage(message, symmetricKey);
+        if (!encrypted) {
+          log("Failed to encrypt the message.");
+          return null;
+        }
+        
+        // Serialize ephemeral public key in uncompressed format
+        const ephemeralPubKeyUncompressedHex = ephemeralKeyPair.getPublic(false, 'hex');
+        
+        // Assemble the encrypted message: ephemeralPubKey + nonce + tag + ciphertext
+        const encryptedMessage = assembleEncryptedMessage(
+          ephemeralPubKeyUncompressedHex,
+          encrypted.iv,
+          encrypted.tag,
+          encrypted.ciphertext
+        );
+        
+        return encryptedMessage;
+      } catch (error) {
+        log(`[Encrypt] Error encrypting payload: ${error.message}`);
+        return null;
+      }
+    }
+    async function decryptPayload(payload, privateKeyHex) {
+      try {
+        const ephemeralPubKeyBytes = payload.slice(0, 65);
+        const ephemeralPubKeyHex = uint8ArrayToHex(ephemeralPubKeyBytes);
+        const senderEphemeralKey = ec.keyFromPublic(ephemeralPubKeyHex, 'hex');
+
+        const receiverKeyPair = ec.keyFromPrivate(privateKeyHex, 'hex');
+        const sharedSecret = deriveSharedSecretDecrypt(senderEphemeralKey, receiverKeyPair);
+        if (!sharedSecret) {
+          log("[Decrypt] Failed to derive shared secret.");
+          return null;
+        }
+
+        log("[Decrypt] Deriving Symmetric Key using HKDF.");
+        const symmetricKey = await deriveSymmetricKeyHKDF(sharedSecret);
+        if (!symmetricKey) {
+          log("[Decrypt] Failed to derive symmetric key.");
+          return null;
+        }
+
+        const decryptedPlaintext = await decryptMessage(payload, symmetricKey);
+
+        return decryptedPlaintext;
+      } catch (error) {
+        return null;
+      }
+    }
 
     const { protobuf } = window;
 
@@ -225,12 +402,8 @@
 
     let pc; 
     let dataChannel;
-    let rsaKeyPair; // RSA Key Pair
-    let exportedPublicKey;
 
     async function startWebRTC() {
-      await initializeKeys();
-
       pc = new RTCPeerConnection({
         iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
       });
@@ -239,18 +412,27 @@
 
       dataChannel.onopen = () => {
         log("[DataChannel] State: " + dataChannel.readyState);
+        log("[DataChannel] Current session key pair generated.");
       };
       dataChannel.onclose = () => {
         log("[DataChannel] Closed.");
       };
-      dataChannel.onmessage = (event) => {
+      dataChannel.onmessage = async (event) => {
         try {
+          const encrypt = encryptCheckbox.checked;
+
           const incomingBuffer = new Uint8Array(event.data);
           const incomingMsg = OutgoingMessage.decode(incomingBuffer);
 
           if (incomingMsg.response && incomingMsg.response.payload) {
-            const payload = new TextDecoder().decode(incomingMsg.response.payload);
-            log("[DataChannel] Received ResolverResponse: " + payload);
+            if (encrypt) {
+              const decryptedMsg = await decryptPayload(incomingMsg.response.payload, keyPair.getPrivate('hex'));
+              log("[DataChannel] Raw encrypted response: " + uint8ArrayToHex(incomingMsg.response.payload));
+              log("[DataChannel] Decrypted response: " + decryptedMsg);
+            } else {
+              const payload = new TextDecoder().decode(incomingMsg.response.payload);
+              log("[DataChannel] Received unencrypted response: " + payload);
+            }
           } else if (incomingMsg.error) {
             log("[DataChannel] Received Error: " + incomingMsg.error.message);
           }
@@ -329,18 +511,18 @@
 
     sendBtn.onclick = async () => {
       if (!dataChannel || dataChannel.readyState !== "open") {
-        log("[Send] Data channel not open.");
+        log("[DataChannel] Data channel not open.");
         return;
       }
       const msg = messageArea.value.trim();
       if (!msg) {
-        log("[Send] Message is empty.");
+        log("[DataChannel] Message is empty.");
         return;
       }
 
       const pubKey = publicKeyInput.value.trim();
       if (!pubKey) {
-        log("[Send] Public key is empty.");
+        log("[DataChannel] Public key is empty.");
         return;
       }
 
@@ -354,8 +536,11 @@
       } else {
         let payload;
         if (encrypt) {
-          payload = await encryptMessage(msg, pubKey);
+          payload = await encryptPayload(pubKey, msg);
+          log("[DataChannel] Raw unencrypted message: " + msg);
+          log("[DataChannel] Encrypted message sent: " + uint8ArrayToHex(payload));
         } else {
+          log("[DataChannel] Unencrypted message sent: " + msg);
           payload = new TextEncoder().encode(msg);
         }
 
@@ -364,16 +549,15 @@
             id: "resolver-request",
             payload: payload,
             encrypted: encrypt,
-            publicKey: exportedPublicKey,
+            publicKey: hexToUint8Array(publicKeyCompressed),
           }),
-          publicKeys: [hexStringToUint8Array(pubKey)]
+          publicKeys: [hexToUint8Array(pubKey)]
         });
 
         message = IncomingMessage.encode(outgoingMsg).finish();
       }
 
       dataChannel.send(message);
-      log("[Send] Sent: " + msg);
       messageArea.value = "";
     };
 

@@ -283,7 +283,7 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 				defer waitGroupForRequestGoroutine.Done()
 			}()
 		}
-		//Waiting when all requests return response (correct, with error, etc)
+		// Waiting when all requests return response (correct, with error, etc)
 		waitGroupForRequestGoroutine.Wait()
 
 		respMessage := w.tryFindCorrectResponse(respMessageChan)
@@ -447,19 +447,19 @@ func (w *Server) tryGetResponseFromResolver(publicKey []byte, request *pb.Resolv
 }
 
 // try find correct response from resolvers, if cant find correct - return someone, probably with error
-func (s *Server) tryFindCorrectResponse(chanWithResp chan *pb.OutgoingMessage) *pb.OutgoingMessage {
+func (w *Server) tryFindCorrectResponse(chanWithResp chan *pb.OutgoingMessage) *pb.OutgoingMessage {
 	resps := make([]*pb.OutgoingMessage, len(chanWithResp))
 
-	//rewrite in array responses from channel and check this response is success
+	// rewrite in array responses from channel and check this response is success
 	for i := range resps {
 		resps[i] = <-chanWithResp
 
-		s.logger.Debug("check is response successful", slog.Any("publicKey", resps[i].PublicKey))
+		w.logger.Debug("check is response successful", slog.Any("publicKey", resps[i].PublicKey))
 		if resps[i].GetError() == nil {
 			return resps[i]
 		}
 	}
 
-	//if successful response not found, return first respons with error
+	// if successful response not found, return first respons with error
 	return resps[0]
 }

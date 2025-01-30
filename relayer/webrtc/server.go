@@ -273,15 +273,20 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 
 		w.logger.Debug("received message", slog.Any("request", message.Request), slog.String("publicKeys", fmt.Sprintf("%x", message.PublicKeys)))
 
-		respMessageChan := make(chan *pb.OutgoingMessage, 1)
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		respMessageChan := make(chan *pb.OutgoingMessage, len(message.PublicKeys))
 
+		waitGroupForRequestGoroutine := &sync.WaitGroup{}
 		for _, publicKey := range message.PublicKeys {
-			go w.retryGetResponseFromResolver(ctx, cancel, publicKey, message.Request, respMessageChan)
+			waitGroupForRequestGoroutine.Add(1)
+			go func() {
+				w.retryGetResponseFromResolver(publicKey, message.Request, respMessageChan)
+				defer waitGroupForRequestGoroutine.Done()
+			}()
 		}
+		//Waiting when all requests return response (correct, with error, etc)
+		waitGroupForRequestGoroutine.Wait()
 
-		respMessage := <-respMessageChan
+		respMessage := w.tryFindCorrectResponse(respMessageChan)
 
 		if err := w.sendResponse(dc, respMessage); err != nil {
 			respMessage := &pb.OutgoingMessage{
@@ -363,63 +368,48 @@ func mapErrorToCodeAndMessage(err error) (pb.ErrorCode, string) {
 	return pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED, fmt.Sprintf("unexpected error: %s", err.Error())
 }
 
-func (w *Server) retryGetResponseFromResolver(ctx context.Context, cancelFunc context.CancelFunc, publicKey []byte, request *pb.ResolverRequest, respChan chan *pb.OutgoingMessage) {
+func (w *Server) retryGetResponseFromResolver(publicKey []byte, request *pb.ResolverRequest, respChan chan *pb.OutgoingMessage) {
 	w.logger.Debug("start request to resolver", slog.Any("public_key", string(publicKey)))
 
+	resp := &pb.OutgoingMessage{}
 	retryRequest := w.cfg.Count
 	requestSleepInterval := w.cfg.Interval
+
 	if !w.cfg.Enabled {
 		w.logger.Debug("retry requests is disabled, set parameters for one")
 		retryRequest = 1
 		requestSleepInterval = time.Duration(0)
 	}
-
-	resp := &pb.OutgoingMessage{}
-
 	for attempt := range retryRequest {
-		select {
-		// check ctx is done, it means that someone goroutine already put response in chan
-		case <-ctx.Done():
+		w.logger.Debug("try get response from resolver", slog.Any("attempt", attempt+1), slog.Any("publicKey", string(publicKey)))
+		resp = w.tryGetResponseFromResolver(publicKey, request)
+
+		// if response without error, there is break cycle for attempts and put the message in chan
+		if resp.GetError() == nil {
+			w.logger.Info("success response from resolver")
+			w.logger.Debug("response from resolver without error, put it in channel", slog.Any("publicKey", string(publicKey)))
+			break
+		}
+
+		// But if response with error, check which error that, start sleep and continue cycle for attempts
+		switch {
+		case w.isErrorForRetry(resp.GetError().Code):
 			{
-				w.logger.Info("another resolver faster return response")
-				break
+				w.logger.Debug("resolver returned supported error for retry")
+				w.logger.Debug("start sleep for interval", slog.Any("time_duration", requestSleepInterval))
+				time.Sleep(requestSleepInterval)
 			}
-		// if ctx doesnt done, there is an next attempt get some response from resolvers
+		// there is no point retry get some response from resolvers, because nothing will change
+		// for example, error when dapps send request with not supported method in api handler
 		default:
 			{
-				w.logger.Debug("try get response from resolver", slog.Any("attempt", attempt+1), slog.Any("publicKey", string(publicKey)))
-				resp = w.tryGetResponseFromResolver(publicKey, request)
-
-				// if response without error, there is break cycle for attempts and put the message in chan
-				if resp.GetError() == nil {
-					w.logger.Info("success response from resolver")
-					w.logger.Debug("response from resolver without error, put it in channel", slog.Any("publicKey", string(publicKey)))
-					break
-				}
-
-				// But if response with error, check which error that, start sleep and continue cycle for attempts
-				switch {
-				case w.isErrorForRetry(resp.GetError().Code):
-					{
-						w.logger.Debug("resolver returned supported error for retry")
-						w.logger.Debug("start sleep for interval", slog.Any("time_duration", requestSleepInterval))
-						time.Sleep(requestSleepInterval)
-						continue
-					}
-				// there is no point retry get some response from resolvers, because nothing will change
-				// for example, error when dapps send request with not supported method in api handler
-				default:
-					{
-						w.logger.Error("unsupported error from resolver, retry is not possible", slog.Any("err", resp.GetError().Message))
-						break
-					}
-				}
+				w.logger.Error("unsupported error from resolver, retry is not possible", slog.Any("err", resp.GetError().Message))
+				break
 			}
 		}
 	}
-
+	w.logger.Debug("put OutgoingMessage to response channel", slog.Any("publicKey", resp.PublicKey))
 	respChan <- resp
-	cancelFunc()
 }
 
 func (w *Server) isErrorForRetry(errorCode pb.ErrorCode) bool {
@@ -454,4 +444,22 @@ func (w *Server) tryGetResponseFromResolver(publicKey []byte, request *pb.Resolv
 	}
 
 	return respMessage
+}
+
+// try find correct response from resolvers, if cant find correct - return someone, probably with error
+func (s *Server) tryFindCorrectResponse(chanWithResp chan *pb.OutgoingMessage) *pb.OutgoingMessage {
+	resps := make([]*pb.OutgoingMessage, len(chanWithResp))
+
+	//rewrite in array responses from channel and check this response is success
+	for i := range resps {
+		resps[i] = <-chanWithResp
+
+		s.logger.Debug("check is response successful", slog.Any("publicKey", resps[i].PublicKey))
+		if resps[i].GetError() == nil {
+			return resps[i]
+		}
+	}
+
+	//if successful response not found, return first respons with error
+	return resps[0]
 }

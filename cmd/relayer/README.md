@@ -36,6 +36,9 @@ retry_request:
 - **`retry_request.enabled`**: The flag for turn on/off retry request if resolver return some error.
 - **`retry_request.count`**: The count of attempt repeated requests.
 - **`retry_request.interval`**: The interval between repeated requests
+- **`peers_port_range.enabled`**: The flag for turn on/off range for peer connections port
+- **`peers_port_range.min`**: The minimum from range
+- **`peers_port_range.max`**: The maximum from range
 
 
 ## Command-Line Interface

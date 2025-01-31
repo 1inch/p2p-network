@@ -13,6 +13,7 @@ type Config struct {
 	ContractAddress      string             `yaml:"contract_address"`
 	PrivateKey           string             `yaml:"private_key"`
 	RetryRequestConfig   RetryRequestConfig `yaml:"retry_request"`
+	PortRangeConfig      PortRangeConfig    `yaml:"peers_port_range"`
 }
 
 // RetryRequestConfig represents the configuration for retry request to resolver
@@ -23,6 +24,13 @@ type RetryRequestConfig struct {
 	Count uint8 `yaml:"count"`
 	// Interval represents interval between requests
 	Interval time.Duration `yaml:"interval"`
+}
+
+// PortRangeConfig represents the configuration for peer connections port range between min and max
+type PortRangeConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Min     uint16 `yaml:"min"`
+	Max     uint16 `yaml:"max"`
 }
 
 // DefaultConfig returns default configuration for the relayer node.

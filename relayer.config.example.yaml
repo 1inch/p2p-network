@@ -10,3 +10,7 @@ retry_request:
   enabled: true
   count: 5
   interval: 1s
+peers_port_range:
+  enabled: true
+  min: 15000
+  max: 15500

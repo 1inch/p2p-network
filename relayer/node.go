@@ -90,10 +90,7 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 			logger.Error("failed to initialize registry client", slog.Any("err", err))
 			return nil, err
 		}
-		webrtcCfg := webrtc.RetryRequestConfig{
-			Count:    cfg.RetryRequestConfig.Count,
-			Interval: cfg.RetryRequestConfig.Interval,
-		}
+		webrtcCfg := mapRelayerCfgToWebrtcCfg(*cfg)
 		werbrtcServer, err = webrtc.New(webrtcCfg, logger.WithGroup("webrtc"), cfg.WebRTCICEServer, grpc.New(registryClient), sdpRequests, iceCandidates)
 		if err != nil {
 			logger.Error("failed to create webrtc server", slog.String("iceserver", cfg.WebRTCICEServer), slog.Any("err", err))
@@ -180,4 +177,19 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func mapRelayerCfgToWebrtcCfg(relayerCfg Config) webrtc.Config {
+	webrtcCfg := webrtc.Config{
+		RetryRequestConfig: webrtc.RetryRequestConfig{
+			Count:    relayerCfg.RetryRequestConfig.Count,
+			Interval: relayerCfg.RetryRequestConfig.Interval,
+		},
+		PortRangeConfig: webrtc.PortRangeConfig{
+			Min: relayerCfg.PortRangeConfig.Max,
+			Max: relayerCfg.PortRangeConfig.Max,
+		},
+	}
+
+	return webrtcCfg
 }

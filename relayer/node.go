@@ -92,8 +92,14 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 			logger.Error("failed to initialize registry client", slog.Any("err", err))
 			return nil, err
 		}
-		werbrtcServer, err = webrtc.New(logger.WithGroup("webrtc"), cfg.WebRTCICEServer, grpc.New(logger, registryClient), sdpRequests, iceCandidates)
-		if err != nil {
+
+    webrtcCfg := webrtc.RetryRequestConfig{
+			Count:    cfg.RetryRequestConfig.Count,
+			Interval: cfg.RetryRequestConfig.Interval,
+		}
+		werbrtcServer, err = webrtc.New(webrtcCfg, logger.WithGroup("webrtc"), cfg.WebRTCICEServer, grpc.New(registryClient), sdpRequests, iceCandidates)
+
+    if err != nil {
 			logger.Error("failed to create webrtc server", slog.String("iceserver", cfg.WebRTCICEServer), slog.Any("err", err))
 			return nil, err
 		}

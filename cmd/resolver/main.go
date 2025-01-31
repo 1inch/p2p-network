@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -11,6 +12,13 @@ import (
 	"github.com/1inch/p2p-network/internal/configs"
 	"github.com/1inch/p2p-network/resolver"
 	"github.com/urfave/cli"
+)
+
+var (
+	errContractAddressRequired = errors.New("contract address required")
+	errRpcUrlRequired          = errors.New("rpc url required")
+	errGrpcEndpointRequired    = errors.New("grpc endpoint required")
+	errPrivateKeyRequired      = errors.New("private key required")
 )
 
 // TODO: setup cli interface
@@ -110,15 +118,15 @@ func cliCommandRegister() cli.Command {
 				Usage: "contract address where the register is located",
 			},
 			&cli.StringFlag{
-				Name:  "privKey",
+				Name:  "private_key",
 				Usage: "account private key in hex which pay fee for register resolver",
 			},
 			&cli.StringFlag{
-				Name:  "ip",
-				Usage: "this ip will set for resolver node",
+				Name:  "grpc_endpoint",
+				Usage: "this endpoint will set for resolver node",
 			},
 			&cli.StringFlag{
-				Name:  "configFile",
+				Name:  "config_file",
 				Usage: "Path to the configuration file",
 			},
 		},
@@ -130,26 +138,39 @@ func cliCommandRegister() cli.Command {
 			cfg := &resolver.Config{}
 
 			// Try to load config file, if present
-			loadedCfg := loadConfigByPath(c.String("configFile"))
+			loadedCfg := loadConfigByPath(c.String("config_file"))
 			if loadedCfg != nil {
 				cfg = loadedCfg
-			}
+			} else {
+				// check if this param is not null and override
+				contractAddr := c.String("contract_address")
+				if contractAddr != "" {
+					cfg.ContractAddress = contractAddr
+				} else {
+					return errContractAddressRequired
+				}
 
-			// check if this param is not null and override
-			contractAddr := c.String("contract_address")
-			if contractAddr != "" {
-				cfg.ContractAddress = contractAddr
-			}
+				// check if this param is not null and override
+				rpc_url := c.String("rpc_url")
+				if rpc_url != "" {
+					cfg.RpcUrl = rpc_url
+				} else {
+					return errRpcUrlRequired
+				}
 
-			// check if this param is not null and override
-			rpc_url := c.String("rpc_url")
-			if rpc_url != "" {
-				cfg.RpcUrl = rpc_url
-			}
+				grpc_endpoint := c.String("grpc_endpoint")
+				if grpc_endpoint != "" {
+					cfg.GrpcEndpoint = grpc_endpoint
+				} else {
+					return errGrpcEndpointRequired
+				}
 
-			privKey := c.String("privKey")
-			if privKey != "" {
-				cfg.PrivateKey = privKey
+				privKey := c.String("private_key")
+				if privKey != "" {
+					cfg.PrivateKey = privKey
+				} else {
+					return errPrivateKeyRequired
+				}
 			}
 
 			regResolver, err := resolver.NewRegistrationResolver(logger, cfg)

@@ -19,7 +19,7 @@ type RetryConfig struct {
 	Interval time.Duration
 }
 
-// PortConfig represents the configuration for peer connections port range between min and max
+// PeerPortConfig represents the configuration for peer connections port range between min and max
 type PeerPortConfig struct {
 	Enabled bool
 	Min     uint16

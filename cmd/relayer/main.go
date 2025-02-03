@@ -59,7 +59,7 @@ func main() {
 					ctx, cancel := context.WithCancel(context.Background())
 					defer cancel()
 
-					if cfg.WithNodeRegistry {
+					if cfg.DiscoveryConfig.WithNodeRegistry {
 						err := node.RegisterRelayer(ctx)
 						if err != nil {
 							logger.Error("failed to register relayer node", slog.Any("err", err))

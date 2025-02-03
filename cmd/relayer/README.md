@@ -11,16 +11,21 @@ Below is an example configuration:
 ```yaml
 log_level: DEBUG
 http_endpoint: 127.0.0.1:8880
-webrtc_ice_server: stun:stun1.l.google.com:19302
-grpc_server_address: 127.0.0.1:0
-blockchain_rpc_address: http://127.0.0.1:8545
-with_node_registry: false
-contract_address: 0x5fbdb2315678afecb367f032d93f642f64180aa3
 private_key: 59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
-retry_request:
-  enabled: true
-  count: 5
-  interval: 1s
+discovery:
+  rpc_url: http://127.0.0.1:8545
+  with_node_registry: false
+  contract_address: 0x5fbdb2315678afecb367f032d93f642f64180aa3
+webrtc:
+  ice_server: stun:stun1.l.google.com:19302
+  retry:
+    enabled: true
+    count: 5
+    interval: 1s
+  port_range:
+    enabled: true
+    min: 15000
+    max: 15500
 ```
 
 
@@ -28,14 +33,16 @@ retry_request:
 ### Configuration Fields
 - **`log_level`**: The logging level for the node (`DEBUG`, `INFO`, `WARN`, `ERROR`).
 - **`http_endpoint`**: The HTTP endpoint where the node listens for SDP signaling requests.
-- **`webrtc_ice_server`**: The ICE server used for WebRTC signaling (e.g., STUN or TURN server).
-- **`grpc_server_address`**: The gRPC server address the node interacts with (Resolver node).
-- **`blockchain_rpc_address`**: The rpc endpoint of ETH blockchain node.
-- **`contract_address`**: The address where discovery contract is located.
 - **`private_key`**: The private key belong to the relayer.
-- **`retry_request.enabled`**: The flag for turn on/off retry request if resolver return some error.
-- **`retry_request.count`**: The count of attempt repeated requests.
-- **`retry_request.interval`**: The interval between repeated requests
+- **`discovery.rpc_url`**:  The rpc endpoint of discovery service, expect ETH blockchain node.
+- **`discovery.contract_address`**: The address where discovery contract is located.
+- **`webrtc.ice_server`**: The ICE server used for WebRTC signaling (e.g., STUN or TURN server).
+- **`webrtc.retry.enabled`**: The flag for turn on/off retry request if resolver return some error.
+- **`webrtc.retry.count`**: The count of attempt repeated requests.
+- **`webrtc.retry.interval`**: The interval between repeated requests
+- **`webrtc.port_range.enabled`**: The flag for turn on/off range for peer connections port
+- **`webrtc.port_range.min`**: The minimum from range
+- **`webrtc.port_range.max`**: The maximum from range
 
 
 ## Command-Line Interface

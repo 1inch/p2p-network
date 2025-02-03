@@ -233,7 +233,7 @@ func setupRelayer(logger *slog.Logger) (chan relayerwebrtc.SDPRequest, chan rela
 		return nil, nil, nil, err
 	}
 
-	server, err := relayerwebrtc.New(relayerwebrtc.RetryRequestConfig{}, logger, ICEServer, relayergrpc.New(registry), sdpRequests, iceCandidates)
+	server, err := relayerwebrtc.New(relayerwebrtc.Config{}, logger, ICEServer, relayergrpc.New(registry), sdpRequests, iceCandidates)
 	if err != nil {
 		return nil, nil, nil, err
 	}

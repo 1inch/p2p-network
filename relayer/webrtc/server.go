@@ -56,7 +56,7 @@ type ICECandidate struct {
 
 // Server wraps the webrtc.Server.
 type Server struct {
-	cfg           RetryRequestConfig
+	cfg           Config
 	logger        *slog.Logger
 	ICEServer     string
 	grpcClient    GRPCClient
@@ -69,7 +69,7 @@ type Server struct {
 
 // New initializes a new WebRTC server.
 func New(
-	cfg RetryRequestConfig,
+	cfg Config,
 	logger *slog.Logger,
 	iceServer string,
 	client GRPCClient,
@@ -97,9 +97,7 @@ func New(
 func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*webrtc.SessionDescription, error) {
 	w.logger.Debug("handle sdp", slog.String("sesionID", sessionID))
 
-	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{{URLs: []string{w.ICEServer}}},
-	})
+	pc, err := w.newPeerConnection()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create peer connection: %w", err)
 	}
@@ -372,10 +370,10 @@ func (w *Server) retryGetResponseFromResolver(publicKey []byte, request *pb.Reso
 	w.logger.Debug("start request to resolver", slog.Any("public_key", string(publicKey)))
 
 	resp := &pb.OutgoingMessage{}
-	retryRequest := w.cfg.Count
-	requestSleepInterval := w.cfg.Interval
+	retryRequest := w.cfg.RetryConfig.Count
+	requestSleepInterval := w.cfg.RetryConfig.Interval
 
-	if !w.cfg.Enabled {
+	if !w.cfg.RetryConfig.Enabled {
 		w.logger.Debug("retry requests is disabled, set parameters for one")
 		retryRequest = 1
 		requestSleepInterval = time.Duration(0)
@@ -462,4 +460,23 @@ func (w *Server) tryFindCorrectResponse(chanWithResp chan *pb.OutgoingMessage) *
 
 	// if successful response not found, return first respons with error
 	return resps[0]
+}
+
+// create and configure new peer connection
+func (w *Server) newPeerConnection() (*webrtc.PeerConnection, error) {
+	s := webrtc.SettingEngine{}
+
+	if w.cfg.PeerPortConfig.Enabled {
+		err := s.SetEphemeralUDPPortRange(w.cfg.PeerPortConfig.Min, w.cfg.PeerPortConfig.Max)
+		if err != nil {
+			w.logger.Error("failed set peers port range", slog.Any("err", err.Error()))
+			return nil, err
+		}
+	}
+
+	api := webrtc.NewAPI(webrtc.WithSettingEngine(s))
+
+	return api.NewPeerConnection(webrtc.Configuration{
+		ICEServers: []webrtc.ICEServer{{URLs: []string{w.ICEServer}}},
+	})
 }

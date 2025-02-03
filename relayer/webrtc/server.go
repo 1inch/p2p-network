@@ -370,10 +370,10 @@ func (w *Server) retryGetResponseFromResolver(publicKey []byte, request *pb.Reso
 	w.logger.Debug("start request to resolver", slog.Any("public_key", string(publicKey)))
 
 	resp := &pb.OutgoingMessage{}
-	retryRequest := w.cfg.RetryRequestConfig.Count
-	requestSleepInterval := w.cfg.RetryRequestConfig.Interval
+	retryRequest := w.cfg.RetryConfig.Count
+	requestSleepInterval := w.cfg.RetryConfig.Interval
 
-	if !w.cfg.RetryRequestConfig.Enabled {
+	if !w.cfg.RetryConfig.Enabled {
 		w.logger.Debug("retry requests is disabled, set parameters for one")
 		retryRequest = 1
 		requestSleepInterval = time.Duration(0)
@@ -466,8 +466,8 @@ func (w *Server) tryFindCorrectResponse(chanWithResp chan *pb.OutgoingMessage) *
 func (w *Server) newPeerConnection() (*webrtc.PeerConnection, error) {
 	s := webrtc.SettingEngine{}
 
-	if w.cfg.PortRangeConfig.Enabled {
-		err := s.SetEphemeralUDPPortRange(w.cfg.PortRangeConfig.Min, w.cfg.PortRangeConfig.Max)
+	if w.cfg.PeerPortConfig.Enabled {
+		err := s.SetEphemeralUDPPortRange(w.cfg.PeerPortConfig.Min, w.cfg.PeerPortConfig.Max)
 		if err != nil {
 			w.logger.Error("failed set peers port range", slog.Any("err", err.Error()))
 			return nil, err

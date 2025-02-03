@@ -257,7 +257,7 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 		{
 			description: "Retry get request after error",
 			serverCfg: relayerwebrtc.Config{
-				RetryRequestConfig: relayerwebrtc.RetryRequestConfig{
+				RetryConfig: relayerwebrtc.RetryConfig{
 					Enabled: true,
 					Count:   2,
 				},

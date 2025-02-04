@@ -2,10 +2,13 @@
 package webrtc
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
 
@@ -43,9 +46,10 @@ type RegistryClient interface {
 
 // SDPRequest represents SDP request.
 type SDPRequest struct {
-	SessionID string
-	Offer     webrtc.SessionDescription
-	Response  chan *webrtc.SessionDescription
+	SessionID    string
+	Offer        webrtc.SessionDescription
+	CandidateURL string
+	Response     chan *webrtc.SessionDescription
 }
 
 // ICECandidate represents ICECandidate request.
@@ -94,7 +98,7 @@ func New(
 }
 
 // HandleSDP processes an SDP offer, sets up a PeerConnection, and generates an SDP answer.
-func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*webrtc.SessionDescription, error) {
+func (w *Server) HandleSDP(candidateURL, sessionID string, offer webrtc.SessionDescription) (*webrtc.SessionDescription, error) {
 	w.logger.Debug("handle sdp", slog.String("sesionID", sessionID))
 
 	pc, err := w.newPeerConnection()
@@ -124,6 +128,9 @@ func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*
 		}
 
 		w.logger.Debug("ice candidate found", slog.String("sessionID", sessionID), slog.String("candidate", candidate.String()))
+		if w.cfg.UseTrickleICE {
+			go w.sendCandidate(candidateURL, sessionID, *candidate)
+		}
 	})
 
 	// Handle DataChannel setup.
@@ -161,7 +168,9 @@ func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*
 	w.connections[sessionID] = pc
 	w.mu.Unlock()
 
-	<-gatherComplete
+	if !w.cfg.UseTrickleICE {
+		<-gatherComplete
+	}
 
 	return pc.LocalDescription(), nil
 }
@@ -177,7 +186,7 @@ func (w *Server) Run(ctx context.Context) error {
 			if !ok {
 				return nil
 			}
-			answer, err := w.HandleSDP(req.SessionID, req.Offer)
+			answer, err := w.HandleSDP(req.CandidateURL, req.SessionID, req.Offer)
 			if err != nil {
 				w.logger.Error("failed to process sdp offer", slog.Any("err", err))
 				req.Response <- nil
@@ -479,4 +488,26 @@ func (w *Server) newPeerConnection() (*webrtc.PeerConnection, error) {
 	return api.NewPeerConnection(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{{URLs: []string{w.ICEServer}}},
 	})
+}
+
+func (w *Server) sendCandidate(candidateURL string, sessionID string, candidate webrtc.ICECandidate) {
+	payload := ICECandidate{
+		SessionID: sessionID,
+		Candidate: candidate,
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		w.logger.Error("failed to marshal candidate payload", slog.String("sessionID", sessionID), slog.Any("err", err))
+		return
+	}
+
+	resp, err := http.Post(candidateURL, "application/json", bytes.NewReader(data))
+	if err != nil {
+		w.logger.Error("failed to send candidate", slog.String("sessionID", sessionID), slog.Any("err", err))
+		return
+	}
+	defer resp.Body.Close()
+
+	w.logger.Debug("candidate sent", slog.String("sessionID", sessionID), slog.Int("status", resp.StatusCode))
 }

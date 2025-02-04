@@ -14,6 +14,7 @@ type Config struct {
 // WebrtcConfig represents the configuration for webrtc server
 type WebrtcConfig struct {
 	ICEServer      string         `yaml:"ice_server"`
+	UseTrickleICE  string         `yaml:"use_trickle_ice"`
 	RetryConfig    RetryConfig    `yaml:"retry"`
 	PeerPortConfig PeerPortConfig `yaml:"port"`
 }

@@ -7,6 +7,7 @@ type Config struct {
 	ICEServer      string
 	RetryConfig    RetryConfig
 	PeerPortConfig PeerPortConfig
+	UseTrickleICE  bool
 }
 
 // RetryConfig represents the configuration for retry request to resolver

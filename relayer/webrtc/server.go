@@ -502,12 +502,23 @@ func (w *Server) sendCandidate(candidateURL string, sessionID string, candidate 
 		return
 	}
 
-	resp, err := http.Post(candidateURL, "application/json", bytes.NewReader(data))
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, "POST", candidateURL, bytes.NewReader(data))
+	if err != nil {
+		w.logger.Error("failed to create candidate request", slog.String("sessionID", sessionID), slog.Any("err", err))
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		w.logger.Error("failed to send candidate", slog.String("sessionID", sessionID), slog.Any("err", err))
 		return
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close
+		w.logger.Error("failed to close response body", slog.String("sessionID", sessionID), slog.Any("err", err))
+	}()
 
-	w.logger.Debug("candidate sent", slog.String("sessionID", sessionID), slog.Int("status", resp.StatusCode))
+	w.logger.Debug("candidate sent", slog.String("sessionID", sessionID), slog.Any("candidate", candidate), slog.String("status", resp.Status))
 }

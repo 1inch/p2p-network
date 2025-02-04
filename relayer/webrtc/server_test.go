@@ -28,7 +28,7 @@ func TestWebRTCServer_HandleSDP(t *testing.T) {
 	mockGRPCClient := mocks.NewMockGRPCClient(ctrl)
 	mockGRPCClient.EXPECT().Close().AnyTimes()
 
-	server, err := relayerwebrtc.New(relayerwebrtc.Config{}, logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
+	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
 	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{
@@ -85,7 +85,7 @@ func TestWebRTCServer_Run_CleanupOnContextCancel(t *testing.T) {
 	mockGRPCClient := mocks.NewMockGRPCClient(ctrl)
 	mockGRPCClient.EXPECT().Close().Return(nil)
 
-	server, err := relayerwebrtc.New(relayerwebrtc.Config{}, logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
+	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
 	peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})
@@ -143,7 +143,7 @@ func TestWebRTCServer_Run_Shutdown(t *testing.T) {
 	mockGRPCClient := mocks.NewMockGRPCClient(ctrl)
 	mockGRPCClient.EXPECT().Close().Return(nil)
 
-	server, err := relayerwebrtc.New(relayerwebrtc.Config{}, logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
+	server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
 	assert.NoError(t, err, "Failed to create WebRTC server")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -167,7 +167,7 @@ func TestWebRTCServer_Run_Shutdown(t *testing.T) {
 func TestWebRTCServer_DataChannel(t *testing.T) {
 	testCases := []struct {
 		description string
-		serverCfg   relayerwebrtc.Config
+		options     []relayerwebrtc.Option
 		setupMock   func(mockGRPCClient *mocks.MockGRPCClient)
 		expected    struct {
 			errorCode pb.ErrorCode
@@ -179,7 +179,7 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 	}{
 		{
 			description: "Successful gRPC execution",
-			serverCfg:   relayerwebrtc.Config{},
+			options:     []relayerwebrtc.Option{},
 			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
 				mockGRPCClient.EXPECT().Execute(gomock.Any(), []byte("public-key-1"), gomock.Cond(func(req *pb.ResolverRequest) bool {
 					return req.Id == "test-req" && string(req.Payload) == "test-message"
@@ -201,7 +201,7 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 		},
 		{
 			description: "Resolver lookup failure",
-			serverCfg:   relayerwebrtc.Config{},
+			options:     []relayerwebrtc.Option{},
 			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
 				mockGRPCClient.EXPECT().Execute(gomock.Any(), []byte("public-key-1"), gomock.Cond(func(req *pb.ResolverRequest) bool {
 					return req.Id == "test-req" && string(req.Payload) == "resolver-error"
@@ -220,7 +220,7 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 		},
 		{
 			description: "gRPC execution failure",
-			serverCfg:   relayerwebrtc.Config{},
+			options:     []relayerwebrtc.Option{},
 			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
 				mockGRPCClient.EXPECT().Execute(gomock.Any(), []byte("public-key-1"), gomock.Cond(func(req *pb.ResolverRequest) bool {
 					return req.Id == "test-req" && string(req.Payload) == "grpc-error"
@@ -239,7 +239,7 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 		},
 		{
 			description: "Incorrect message format",
-			serverCfg:   relayerwebrtc.Config{},
+			options:     []relayerwebrtc.Option{},
 			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
 				mockGRPCClient.EXPECT().Execute(gomock.Any(), []byte("public-key-1"), gomock.Any()).Times(0)
 				mockGRPCClient.EXPECT().Close().AnyTimes()
@@ -256,11 +256,12 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 		},
 		{
 			description: "Retry get request after error",
-			serverCfg: relayerwebrtc.Config{
-				RetryConfig: relayerwebrtc.RetryConfig{
-					Enabled: true,
-					Count:   2,
-				},
+			options: []relayerwebrtc.Option{
+				relayerwebrtc.WithRetry(
+					relayerwebrtc.RetryOption{
+						Count: 2,
+					},
+				),
 			},
 			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
 				gomock.InOrder(
@@ -350,7 +351,7 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 			mockGRPCClient := mocks.NewMockGRPCClient(ctrl)
 			tc.setupMock(mockGRPCClient)
 
-			server, err := relayerwebrtc.New(tc.serverCfg, logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates)
+			server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates, tc.options...)
 			assert.NoError(t, err, "Failed to create WebRTC server")
 
 			peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})

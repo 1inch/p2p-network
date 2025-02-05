@@ -258,7 +258,7 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 			description: "Retry get request after error",
 			options: []relayerwebrtc.Option{
 				relayerwebrtc.WithRetry(
-					relayerwebrtc.RetryOption{
+					relayerwebrtc.Retry{
 						Count: 2,
 					},
 				),

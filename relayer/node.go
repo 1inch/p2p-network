@@ -181,17 +181,21 @@ func corsMiddleware(next http.Handler) http.Handler {
 func webrtcOptionsByConfig(cfg Config) []webrtc.Option {
 	opts := []webrtc.Option{}
 
+	if cfg.WebrtcConfig.UseTrickleICE {
+		opts = append(opts, webrtc.WithTrickleICE())
+	}
 	if cfg.WebrtcConfig.RetryConfig.Enabled {
-		opts = append(opts, webrtc.WithRetry(webrtc.RetryOption{
+		opts = append(opts, webrtc.WithRetry(webrtc.Retry{
 			Count:    cfg.WebrtcConfig.RetryConfig.Count,
 			Interval: cfg.WebrtcConfig.RetryConfig.Interval,
 		}))
 	}
 	if cfg.WebrtcConfig.PeerPortConfig.Enabled {
-		opts = append(opts, webrtc.WithPeerPort(webrtc.PeerPortOption{
+		opts = append(opts, webrtc.WithPeerPort(webrtc.PeerRangePort{
 			Min: cfg.WebrtcConfig.PeerPortConfig.Min,
 			Max: cfg.WebrtcConfig.PeerPortConfig.Max,
 		}))
 	}
+
 	return opts
 }

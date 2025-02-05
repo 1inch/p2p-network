@@ -2,10 +2,13 @@
 package webrtc
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
 
@@ -46,9 +49,10 @@ type RegistryClient interface {
 
 // SDPRequest represents SDP request.
 type SDPRequest struct {
-	SessionID string
-	Offer     webrtc.SessionDescription
-	Response  chan *webrtc.SessionDescription
+	SessionID    string
+	Offer        webrtc.SessionDescription
+	CandidateURL string
+	Response     chan *webrtc.SessionDescription
 }
 
 // ICECandidate represents ICECandidate request.
@@ -59,8 +63,9 @@ type ICECandidate struct {
 
 // Server wraps the webrtc.Server.
 type Server struct {
-	retryOpt      *RetryOption
-	peerPortOpt   *PeerPortOption
+	useTrickleICE bool
+	retryOpt      *Retry
+	peerPortOpt   *PeerRangePort
 	logger        *slog.Logger
 	ICEServer     string
 	grpcClient    GRPCClient
@@ -103,21 +108,28 @@ func New(
 }
 
 // WithRetry added retry option in webrtc server
-func WithRetry(option RetryOption) Option {
+func WithRetry(option Retry) Option {
 	return func(s *Server) {
 		s.retryOpt = &option
 	}
 }
 
 // WithPeerPort added peers port option in webrtc server
-func WithPeerPort(option PeerPortOption) Option {
+func WithPeerPort(option PeerRangePort) Option {
 	return func(s *Server) {
 		s.peerPortOpt = &option
 	}
 }
 
+// WithTrickle added send request about candidate
+func WithTrickleICE() Option {
+	return func(s *Server) {
+		s.useTrickleICE = true
+	}
+}
+
 // HandleSDP processes an SDP offer, sets up a PeerConnection, and generates an SDP answer.
-func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*webrtc.SessionDescription, error) {
+func (w *Server) HandleSDP(candidateURL, sessionID string, offer webrtc.SessionDescription) (*webrtc.SessionDescription, error) {
 	w.logger.Debug("handle sdp", slog.String("sesionID", sessionID))
 
 	pc, err := w.newPeerConnection()
@@ -147,6 +159,9 @@ func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*
 		}
 
 		w.logger.Debug("ice candidate found", slog.String("sessionID", sessionID), slog.String("candidate", candidate.String()))
+		if w.useTrickleICE {
+			go w.sendCandidate(candidateURL, sessionID, *candidate)
+		}
 	})
 
 	// Handle DataChannel setup.
@@ -184,7 +199,9 @@ func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*
 	w.connections[sessionID] = pc
 	w.mu.Unlock()
 
-	<-gatherComplete
+	if !w.useTrickleICE {
+		<-gatherComplete
+	}
 
 	return pc.LocalDescription(), nil
 }
@@ -200,7 +217,7 @@ func (w *Server) Run(ctx context.Context) error {
 			if !ok {
 				return nil
 			}
-			answer, err := w.HandleSDP(req.SessionID, req.Offer)
+			answer, err := w.HandleSDP(req.CandidateURL, req.SessionID, req.Offer)
 			if err != nil {
 				w.logger.Error("failed to process sdp offer", slog.Any("err", err))
 				req.Response <- nil
@@ -502,4 +519,37 @@ func (w *Server) newPeerConnection() (*webrtc.PeerConnection, error) {
 	return api.NewPeerConnection(webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{{URLs: []string{w.ICEServer}}},
 	})
+}
+
+func (w *Server) sendCandidate(candidateURL string, sessionID string, candidate webrtc.ICECandidate) {
+	payload := ICECandidate{
+		SessionID: sessionID,
+		Candidate: candidate,
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		w.logger.Error("failed to marshal candidate payload", slog.String("sessionID", sessionID), slog.Any("err", err))
+		return
+	}
+
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, "POST", candidateURL, bytes.NewReader(data))
+	if err != nil {
+		w.logger.Error("failed to create candidate request", slog.String("sessionID", sessionID), slog.Any("err", err))
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		w.logger.Error("failed to send candidate", slog.String("sessionID", sessionID), slog.Any("err", err))
+		return
+	}
+	defer func() {
+		err := resp.Body.Close
+		w.logger.Error("failed to close response body", slog.String("sessionID", sessionID), slog.Any("err", err))
+	}()
+
+	w.logger.Debug("candidate sent", slog.String("sessionID", sessionID), slog.Any("candidate", candidate), slog.String("status", resp.Status))
 }

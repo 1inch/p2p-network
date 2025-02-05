@@ -121,7 +121,7 @@ func WithPeerPort(option PeerRangePort) Option {
 	}
 }
 
-// WithTrickle added send request about candidate
+// WithTrickleICE added send request about candidate
 func WithTrickleICE() Option {
 	return func(s *Server) {
 		s.useTrickleICE = true

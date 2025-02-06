@@ -167,19 +167,19 @@ func TestWebRTCServer_Run_Shutdown(t *testing.T) {
 func TestWebRTCServer_DataChannel(t *testing.T) {
 	testCases := []struct {
 		description string
-		options     []relayerwebrtc.Option
 		setupMock   func(mockGRPCClient *mocks.MockGRPCClient)
 		expected    struct {
 			errorCode pb.ErrorCode
 			errorMsg  string
 		}
+		webrtcOptions []relayerwebrtc.Option
 		// public key generate by this format public-key-<number of key>, example: "public-key-1"
 		countPublicKeys uint16
 		requestPayload  string
 	}{
 		{
-			description: "Successful gRPC execution",
-			options:     []relayerwebrtc.Option{},
+			description:   "Successful gRPC execution",
+			webrtcOptions: []relayerwebrtc.Option{},
 			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
 				mockGRPCClient.EXPECT().Execute(gomock.Any(), []byte("public-key-1"), gomock.Cond(func(req *pb.ResolverRequest) bool {
 					return req.Id == "test-req" && string(req.Payload) == "test-message"
@@ -200,8 +200,8 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 			requestPayload:  "test-message",
 		},
 		{
-			description: "Resolver lookup failure",
-			options:     []relayerwebrtc.Option{},
+			description:   "Resolver lookup failure",
+			webrtcOptions: []relayerwebrtc.Option{},
 			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
 				mockGRPCClient.EXPECT().Execute(gomock.Any(), []byte("public-key-1"), gomock.Cond(func(req *pb.ResolverRequest) bool {
 					return req.Id == "test-req" && string(req.Payload) == "resolver-error"
@@ -219,8 +219,8 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 			requestPayload:  "resolver-error",
 		},
 		{
-			description: "gRPC execution failure",
-			options:     []relayerwebrtc.Option{},
+			description:   "gRPC execution failure",
+			webrtcOptions: []relayerwebrtc.Option{},
 			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
 				mockGRPCClient.EXPECT().Execute(gomock.Any(), []byte("public-key-1"), gomock.Cond(func(req *pb.ResolverRequest) bool {
 					return req.Id == "test-req" && string(req.Payload) == "grpc-error"
@@ -238,8 +238,8 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 			requestPayload:  "grpc-error",
 		},
 		{
-			description: "Incorrect message format",
-			options:     []relayerwebrtc.Option{},
+			description:   "Incorrect message format",
+			webrtcOptions: []relayerwebrtc.Option{},
 			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
 				mockGRPCClient.EXPECT().Execute(gomock.Any(), []byte("public-key-1"), gomock.Any()).Times(0)
 				mockGRPCClient.EXPECT().Close().AnyTimes()
@@ -256,7 +256,7 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 		},
 		{
 			description: "Retry get request after error",
-			options: []relayerwebrtc.Option{
+			webrtcOptions: []relayerwebrtc.Option{
 				relayerwebrtc.WithRetry(
 					relayerwebrtc.Retry{
 						Count: 2,
@@ -299,7 +299,6 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 					Execute(gomock.Any(), gomock.Any(), gomock.Any()).
 					DoAndReturn(func(ctx context.Context, resolverPublicKey []byte, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
 						if string(resolverPublicKey) == "public-key-3" {
-							time.Sleep(time.Second * 2)
 							return &pb.ResolverResponse{
 								Id:      req.Id,
 								Payload: []byte("test-response"),
@@ -309,9 +308,16 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 							Id: req.Id,
 						}, grpc.ErrGRPCExecutionFailed
 					}).
-					Times(4)
+					// because countPublicKeys is 3 where 1 - will return success, 2 - return errors, retry count 3, so:
+					// return errors * retry count + return success = 2 * 3 + 1 = 7 times
+					MaxTimes(7)
 				mockGRPCClient.EXPECT().Close().AnyTimes()
 			},
+			webrtcOptions: []relayerwebrtc.Option{
+				relayerwebrtc.WithRetry(relayerwebrtc.Retry{
+					Count:    3,
+					Interval: time.Second,
+				})},
 			expected: struct {
 				errorCode pb.ErrorCode
 				errorMsg  string
@@ -319,8 +325,73 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 				errorCode: 0,
 				errorMsg:  "",
 			},
-			countPublicKeys: 4,
+			countPublicKeys: 3,
 			requestPayload:  "many-requests",
+		},
+		{
+			description: "Receive many requests all responses error and one final response",
+			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
+				mockGRPCClient.EXPECT().
+					Execute(gomock.Any(), gomock.Any(), gomock.Any()).
+					DoAndReturn(func(ctx context.Context, resolverPublicKey []byte, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
+						if string(resolverPublicKey) == "public-key-3" {
+							return &pb.ResolverResponse{
+								Id: req.Id,
+							}, grpc.ErrResolverLookupFailed // if this error returned webrtc cant try another attempt send request
+						}
+						return &pb.ResolverResponse{
+							Id: req.Id,
+						}, grpc.ErrGRPCExecutionFailed
+					}).
+					// because countPublicKeys is 3 where 1 - will return success, 2 - return errors, retry count 3, so:
+					// return errors * retry count + return success = 2 * 3 + 1 = 7 times
+					MaxTimes(7)
+				mockGRPCClient.EXPECT().Close().AnyTimes()
+			},
+			webrtcOptions: []relayerwebrtc.Option{
+				relayerwebrtc.WithRetry(relayerwebrtc.Retry{
+					Count:    3,
+					Interval: time.Second,
+				})},
+			expected: struct {
+				errorCode pb.ErrorCode
+				errorMsg  string
+			}{
+				errorCode: pb.ErrorCode_ERR_RESOLVER_LOOKUP_FAILED,
+				errorMsg:  "resolver lookup failed: resolver lookup failed",
+			},
+			countPublicKeys: 3,
+			requestPayload:  "many-requests-return-errors",
+		},
+		{
+			description: "All response returned error",
+			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
+				mockGRPCClient.EXPECT().
+					Execute(gomock.Any(), gomock.Any(), gomock.Any()).
+					Return(
+						&pb.ResolverResponse{
+							Id: "test-id",
+						}, grpc.ErrGRPCExecutionFailed,
+					).
+					// because count public keys is 3 and count of retry 3, so:
+					// countPublicKey * retryCount = 3 * 3 = 9
+					Times(9)
+				mockGRPCClient.EXPECT().Close().AnyTimes()
+			},
+			webrtcOptions: []relayerwebrtc.Option{
+				relayerwebrtc.WithRetry(relayerwebrtc.Retry{
+					Count:    3,
+					Interval: time.Second,
+				})},
+			expected: struct {
+				errorCode pb.ErrorCode
+				errorMsg  string
+			}{
+				errorCode: pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED,
+				errorMsg:  "grpc execution failed: gRPC execution failed",
+			},
+			countPublicKeys: 3,
+			requestPayload:  "many-requests-return-errors",
 		},
 	}
 
@@ -351,7 +422,7 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 			mockGRPCClient := mocks.NewMockGRPCClient(ctrl)
 			tc.setupMock(mockGRPCClient)
 
-			server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates, tc.options...)
+			server, err := relayerwebrtc.New(logger, "stun:stun.l.google.com:19302", mockGRPCClient, sdpRequests, iceCandidates, tc.webrtcOptions...)
 			assert.NoError(t, err, "Failed to create WebRTC server")
 
 			peerConnection, err := webrtc.NewPeerConnection(webrtc.Configuration{})

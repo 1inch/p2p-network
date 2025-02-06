@@ -90,8 +90,7 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 			logger.Error("failed to initialize registry client", slog.Any("err", err))
 			return nil, err
 		}
-		webrtcCfg := mapRelayerCfgToWebrtcCfg(*cfg)
-		werbrtcServer, err = webrtc.New(webrtcCfg, logger.WithGroup("webrtc"), cfg.WebrtcConfig.ICEServer, grpc.New(registryClient), sdpRequests, iceCandidates)
+		werbrtcServer, err = webrtc.New(logger.WithGroup("webrtc"), cfg.WebrtcConfig.ICEServer, grpc.New(registryClient), sdpRequests, iceCandidates, webrtcOptionsByConfig(*cfg)...)
 		if err != nil {
 			logger.Error("failed to create webrtc server", slog.String("iceserver", cfg.WebrtcConfig.ICEServer), slog.Any("err", err))
 			return nil, err
@@ -179,19 +178,24 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func mapRelayerCfgToWebrtcCfg(relayerCfg Config) webrtc.Config {
-	webrtcCfg := webrtc.Config{
-		RetryConfig: webrtc.RetryConfig{
-			Enabled:  relayerCfg.WebrtcConfig.RetryConfig.Enabled,
-			Count:    relayerCfg.WebrtcConfig.RetryConfig.Count,
-			Interval: relayerCfg.WebrtcConfig.RetryConfig.Interval,
-		},
-		PeerPortConfig: webrtc.PeerPortConfig{
-			Enabled: relayerCfg.WebrtcConfig.PeerPortConfig.Enabled,
-			Min:     relayerCfg.WebrtcConfig.PeerPortConfig.Max,
-			Max:     relayerCfg.WebrtcConfig.PeerPortConfig.Max,
-		},
+func webrtcOptionsByConfig(cfg Config) []webrtc.Option {
+	opts := []webrtc.Option{}
+
+	if cfg.WebrtcConfig.UseTrickleICE {
+		opts = append(opts, webrtc.WithTrickleICE())
+	}
+	if cfg.WebrtcConfig.RetryConfig.Enabled {
+		opts = append(opts, webrtc.WithRetry(webrtc.Retry{
+			Count:    cfg.WebrtcConfig.RetryConfig.Count,
+			Interval: cfg.WebrtcConfig.RetryConfig.Interval,
+		}))
+	}
+	if cfg.WebrtcConfig.PeerPortConfig.Enabled {
+		opts = append(opts, webrtc.WithPeerPort(webrtc.PeerRangePort{
+			Min: cfg.WebrtcConfig.PeerPortConfig.Min,
+			Max: cfg.WebrtcConfig.PeerPortConfig.Max,
+		}))
 	}
 
-	return webrtcCfg
+	return opts
 }

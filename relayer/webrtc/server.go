@@ -33,6 +33,9 @@ var (
 	ErrConnectionNotFound = errors.New("connection not found for session")
 )
 
+// Option represents configuration of some server parameters
+type Option func(*Server)
+
 // GRPCClient defines the interface for a gRPC client.
 type GRPCClient interface {
 	Execute(ctx context.Context, publicKey []byte, req *pb.ResolverRequest) (*pb.ResolverResponse, error)
@@ -60,7 +63,9 @@ type ICECandidate struct {
 
 // Server wraps the webrtc.Server.
 type Server struct {
-	cfg           Config
+	useTrickleICE bool
+	retryOpt      *Retry
+	peerPortOpt   *PeerRangePort
 	logger        *slog.Logger
 	ICEServer     string
 	grpcClient    GRPCClient
@@ -73,20 +78,19 @@ type Server struct {
 
 // New initializes a new WebRTC server.
 func New(
-	cfg Config,
 	logger *slog.Logger,
 	iceServer string,
 	client GRPCClient,
 	sdpRequests <-chan SDPRequest,
 	iceICECandidates <-chan ICECandidate,
+	options ...Option,
 ) (*Server, error) {
 
 	if iceServer == "" {
 		return nil, ErrInvalidICEServer
 	}
 
-	return &Server{
-		cfg:           cfg,
+	srv := &Server{
 		sdpRequests:   sdpRequests,
 		iceCandidates: iceICECandidates,
 		ICEServer:     iceServer,
@@ -94,7 +98,34 @@ func New(
 		connections:   make(map[string]*webrtc.PeerConnection),
 		dataChannels:  make(map[string]*webrtc.DataChannel),
 		logger:        logger,
-	}, nil
+	}
+
+	for _, opt := range options {
+		opt(srv)
+	}
+
+	return srv, nil
+}
+
+// WithRetry added retry option in webrtc server
+func WithRetry(option Retry) Option {
+	return func(s *Server) {
+		s.retryOpt = &option
+	}
+}
+
+// WithPeerPort added peers port option in webrtc server
+func WithPeerPort(option PeerRangePort) Option {
+	return func(s *Server) {
+		s.peerPortOpt = &option
+	}
+}
+
+// WithTrickleICE added send request about candidate
+func WithTrickleICE() Option {
+	return func(s *Server) {
+		s.useTrickleICE = true
+	}
 }
 
 // HandleSDP processes an SDP offer, sets up a PeerConnection, and generates an SDP answer.
@@ -128,7 +159,7 @@ func (w *Server) HandleSDP(candidateURL, sessionID string, offer webrtc.SessionD
 		}
 
 		w.logger.Debug("ice candidate found", slog.String("sessionID", sessionID), slog.String("candidate", candidate.String()))
-		if w.cfg.UseTrickleICE {
+		if w.useTrickleICE {
 			go w.sendCandidate(candidateURL, sessionID, *candidate)
 		}
 	})
@@ -168,7 +199,7 @@ func (w *Server) HandleSDP(candidateURL, sessionID string, offer webrtc.SessionD
 	w.connections[sessionID] = pc
 	w.mu.Unlock()
 
-	if !w.cfg.UseTrickleICE {
+	if !w.useTrickleICE {
 		<-gatherComplete
 	}
 
@@ -379,13 +410,13 @@ func (w *Server) retryGetResponseFromResolver(publicKey []byte, request *pb.Reso
 	w.logger.Debug("start request to resolver", slog.Any("public_key", string(publicKey)))
 
 	resp := &pb.OutgoingMessage{}
-	retryRequest := w.cfg.RetryConfig.Count
-	requestSleepInterval := w.cfg.RetryConfig.Interval
+	retryRequest := uint8(1)
+	requestSleepInterval := time.Duration(0)
 
-	if !w.cfg.RetryConfig.Enabled {
-		w.logger.Debug("retry requests is disabled, set parameters for one")
-		retryRequest = 1
-		requestSleepInterval = time.Duration(0)
+	if w.retryOpt != nil {
+		w.logger.Debug("retry requests is enabled, set parameters")
+		retryRequest = w.retryOpt.Count
+		requestSleepInterval = w.retryOpt.Interval
 	}
 	for attempt := range retryRequest {
 		w.logger.Debug("try get response from resolver", slog.Any("attempt", attempt+1), slog.Any("publicKey", string(publicKey)))
@@ -475,8 +506,8 @@ func (w *Server) tryFindCorrectResponse(chanWithResp chan *pb.OutgoingMessage) *
 func (w *Server) newPeerConnection() (*webrtc.PeerConnection, error) {
 	s := webrtc.SettingEngine{}
 
-	if w.cfg.PeerPortConfig.Enabled {
-		err := s.SetEphemeralUDPPortRange(w.cfg.PeerPortConfig.Min, w.cfg.PeerPortConfig.Max)
+	if w.peerPortOpt != nil {
+		err := s.SetEphemeralUDPPortRange(w.peerPortOpt.Min, w.peerPortOpt.Max)
 		if err != nil {
 			w.logger.Error("failed set peers port range", slog.Any("err", err.Error()))
 			return nil, err

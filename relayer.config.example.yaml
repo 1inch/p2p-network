@@ -12,7 +12,7 @@ webrtc:
     enabled: true
     count: 5
     interval: 1s
-  port_range:
+  port:
     enabled: true
     min: 15000
     max: 15500

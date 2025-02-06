@@ -22,7 +22,7 @@ webrtc:
     enabled: true
     count: 5
     interval: 1s
-  port_range:
+  port:
     enabled: true
     min: 15000
     max: 15500
@@ -40,9 +40,9 @@ webrtc:
 - **`webrtc.retry.enabled`**: The flag for turn on/off retry request if resolver return some error.
 - **`webrtc.retry.count`**: The count of attempt repeated requests.
 - **`webrtc.retry.interval`**: The interval between repeated requests
-- **`webrtc.port_range.enabled`**: The flag for turn on/off range for peer connections port
-- **`webrtc.port_range.min`**: The minimum from range
-- **`webrtc.port_range.max`**: The maximum from range
+- **`webrtc.port.enabled`**: The flag for turn on/off range for peer connections port
+- **`webrtc.port.min`**: The minimum from range
+- **`webrtc.port.max`**: The maximum from range
 
 
 ## Command-Line Interface

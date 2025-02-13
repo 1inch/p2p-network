@@ -31,6 +31,7 @@ func main() {
 				Name:  "run",
 				Usage: "Runs resolver node",
 				Flags: []cli.Flag{
+					// TODO need unify format for flag names
 					&cli.StringFlag{
 						Name:  "grpc_endpoint",
 						Usage: "gRPC server endpoint",

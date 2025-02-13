@@ -2,10 +2,13 @@
 package webrtc
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
 
@@ -30,6 +33,9 @@ var (
 	ErrConnectionNotFound = errors.New("connection not found for session")
 )
 
+// Option represents configuration of some server parameters
+type Option func(*Server)
+
 // GRPCClient defines the interface for a gRPC client.
 type GRPCClient interface {
 	Execute(ctx context.Context, publicKey []byte, req *pb.ResolverRequest) (*pb.ResolverResponse, error)
@@ -43,9 +49,10 @@ type RegistryClient interface {
 
 // SDPRequest represents SDP request.
 type SDPRequest struct {
-	SessionID string
-	Offer     webrtc.SessionDescription
-	Response  chan *webrtc.SessionDescription
+	SessionID    string
+	Offer        webrtc.SessionDescription
+	CandidateURL string
+	Response     chan *webrtc.SessionDescription
 }
 
 // ICECandidate represents ICECandidate request.
@@ -56,7 +63,9 @@ type ICECandidate struct {
 
 // Server wraps the webrtc.Server.
 type Server struct {
-	cfg           RetryRequestConfig
+	useTrickleICE bool
+	retryOpt      *Retry
+	peerPortOpt   *PeerRangePort
 	logger        *slog.Logger
 	ICEServer     string
 	grpcClient    GRPCClient
@@ -69,20 +78,19 @@ type Server struct {
 
 // New initializes a new WebRTC server.
 func New(
-	cfg RetryRequestConfig,
 	logger *slog.Logger,
 	iceServer string,
 	client GRPCClient,
 	sdpRequests <-chan SDPRequest,
 	iceICECandidates <-chan ICECandidate,
+	options ...Option,
 ) (*Server, error) {
 
 	if iceServer == "" {
 		return nil, ErrInvalidICEServer
 	}
 
-	return &Server{
-		cfg:           cfg,
+	srv := &Server{
 		sdpRequests:   sdpRequests,
 		iceCandidates: iceICECandidates,
 		ICEServer:     iceServer,
@@ -90,14 +98,42 @@ func New(
 		connections:   make(map[string]*webrtc.PeerConnection),
 		dataChannels:  make(map[string]*webrtc.DataChannel),
 		logger:        logger,
-	}, nil
+	}
+
+	for _, opt := range options {
+		opt(srv)
+	}
+
+	return srv, nil
+}
+
+// WithRetry added retry option in webrtc server
+func WithRetry(option Retry) Option {
+	return func(s *Server) {
+		s.retryOpt = &option
+	}
+}
+
+// WithPeerPort added peers port option in webrtc server
+func WithPeerPort(option PeerRangePort) Option {
+	return func(s *Server) {
+		s.peerPortOpt = &option
+	}
+}
+
+// WithTrickleICE added send request about candidate
+func WithTrickleICE() Option {
+	return func(s *Server) {
+		s.useTrickleICE = true
+	}
 }
 
 // HandleSDP processes an SDP offer, sets up a PeerConnection, and generates an SDP answer.
-func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*webrtc.SessionDescription, error) {
-	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{{URLs: []string{w.ICEServer}}},
-	})
+func (w *Server) HandleSDP(candidateURL, sessionID string, offer webrtc.SessionDescription) (*webrtc.SessionDescription, error) {
+	w.logger.Debug("handle sdp", slog.String("sesionID", sessionID))
+
+	pc, err := w.newPeerConnection()
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to create peer connection: %w", err)
 	}
@@ -124,6 +160,9 @@ func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*
 		}
 
 		w.logger.Debug("ice candidate found", slog.String("sessionID", sessionID), slog.String("candidate", candidate.String()))
+		if w.useTrickleICE {
+			go w.sendCandidate(candidateURL, sessionID, *candidate)
+		}
 	})
 
 	// Handle DataChannel setup.
@@ -161,7 +200,9 @@ func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*
 	w.connections[sessionID] = pc
 	w.mu.Unlock()
 
-	<-gatherComplete
+	if !w.useTrickleICE {
+		<-gatherComplete
+	}
 
 	return pc.LocalDescription(), nil
 }
@@ -177,7 +218,7 @@ func (w *Server) Run(ctx context.Context) error {
 			if !ok {
 				return nil
 			}
-			answer, err := w.HandleSDP(req.SessionID, req.Offer)
+			answer, err := w.HandleSDP(req.CandidateURL, req.SessionID, req.Offer)
 			if err != nil {
 				w.logger.Error("failed to process sdp offer", slog.Any("err", err))
 				req.Response <- nil
@@ -370,13 +411,13 @@ func (w *Server) retryGetResponseFromResolver(publicKey []byte, request *pb.Reso
 	w.logger.Debug("start request to resolver", slog.Any("public_key", string(publicKey)))
 
 	resp := &pb.OutgoingMessage{}
-	retryRequest := w.cfg.Count
-	requestSleepInterval := w.cfg.Interval
+	retryRequest := uint8(1)
+	requestSleepInterval := time.Duration(0)
 
-	if !w.cfg.Enabled {
-		w.logger.Debug("retry requests is disabled, set parameters for one")
-		retryRequest = 1
-		requestSleepInterval = time.Duration(0)
+	if w.retryOpt != nil {
+		w.logger.Debug("retry requests is enabled, set parameters")
+		retryRequest = w.retryOpt.Count
+		requestSleepInterval = w.retryOpt.Interval
 	}
 	for attempt := range retryRequest {
 		w.logger.Debug("try get response from resolver", slog.Any("attempt", attempt+1), slog.Any("publicKey", string(publicKey)))
@@ -460,4 +501,56 @@ func (w *Server) tryFindCorrectResponse(chanWithResp chan *pb.OutgoingMessage) *
 
 	// if successful response not found, return first respons with error
 	return resps[0]
+}
+
+// create and configure new peer connection
+func (w *Server) newPeerConnection() (*webrtc.PeerConnection, error) {
+	s := webrtc.SettingEngine{}
+
+	if w.peerPortOpt != nil {
+		err := s.SetEphemeralUDPPortRange(w.peerPortOpt.Min, w.peerPortOpt.Max)
+		if err != nil {
+			w.logger.Error("failed set peers port range", slog.Any("err", err.Error()))
+			return nil, err
+		}
+	}
+
+	api := webrtc.NewAPI(webrtc.WithSettingEngine(s))
+
+	return api.NewPeerConnection(webrtc.Configuration{
+		ICEServers: []webrtc.ICEServer{{URLs: []string{w.ICEServer}}},
+	})
+}
+
+func (w *Server) sendCandidate(candidateURL string, sessionID string, candidate webrtc.ICECandidate) {
+	payload := ICECandidate{
+		SessionID: sessionID,
+		Candidate: candidate,
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		w.logger.Error("failed to marshal candidate payload", slog.String("sessionID", sessionID), slog.Any("err", err))
+		return
+	}
+
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, "POST", candidateURL, bytes.NewReader(data))
+	if err != nil {
+		w.logger.Error("failed to create candidate request", slog.String("sessionID", sessionID), slog.Any("err", err))
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		w.logger.Error("failed to send candidate", slog.String("sessionID", sessionID), slog.Any("err", err))
+		return
+	}
+	defer func() {
+		err := resp.Body.Close
+		w.logger.Error("failed to close response body", slog.String("sessionID", sessionID), slog.Any("err", err))
+	}()
+
+	w.logger.Debug("candidate sent", slog.String("sessionID", sessionID), slog.Any("candidate", candidate), slog.String("status", resp.Status))
 }

@@ -43,9 +43,9 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 		mux.HandleFunc("POST /candidate", webrtc.CandidateHandler(logger, iceCandidates))
 		mux.HandleFunc("GET /relayer", func(w http.ResponseWriter, r *http.Request) {
 			client, err := registry.Dial(r.Context(), &registry.Config{
-				DialURI:         cfg.BlockchainRPCAddress,
+				DialURI:         cfg.DiscoveryConfig.RpcUrl,
 				PrivateKey:      cfg.PrivateKey,
-				ContractAddress: cfg.ContractAddress,
+				ContractAddress: cfg.DiscoveryConfig.ContractAddress,
 			})
 			if err != nil {
 				http.Error(w, "failed to connect to Ethereum node", http.StatusInternalServerError)
@@ -84,23 +84,19 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 		var err error
 		ctx := context.Background()
 		registryClient, err := registry.Dial(ctx, &registry.Config{
-			DialURI:         cfg.BlockchainRPCAddress,
+			DialURI:         cfg.DiscoveryConfig.RpcUrl,
 			PrivateKey:      cfg.PrivateKey,
-			ContractAddress: cfg.ContractAddress,
+			ContractAddress: cfg.DiscoveryConfig.ContractAddress,
 		})
 		if err != nil {
 			logger.Error("failed to initialize registry client", slog.Any("err", err))
 			return nil, err
 		}
 
-		webrtcCfg := webrtc.RetryRequestConfig{
-			Count:    cfg.RetryRequestConfig.Count,
-			Interval: cfg.RetryRequestConfig.Interval,
-		}
-		werbrtcServer, err = webrtc.New(webrtcCfg, logger.WithGroup("webrtc"), cfg.WebRTCICEServer, grpc.New(logger, registryClient), sdpRequests, iceCandidates)
+		werbrtcServer, err = webrtc.New(logger.WithGroup("webrtc"), cfg.WebrtcConfig.ICEServer, grpc.New(registryClient), sdpRequests, iceCandidates, webrtcOptionsByConfig(*cfg)...)
 
 		if err != nil {
-			logger.Error("failed to create webrtc server", slog.String("iceserver", cfg.WebRTCICEServer), slog.Any("err", err))
+			logger.Error("failed to create webrtc server", slog.String("iceserver", cfg.WebrtcConfig.ICEServer), slog.Any("err", err))
 			return nil, err
 		}
 	}
@@ -133,7 +129,7 @@ func (r *Relayer) Run(ctx context.Context) error {
 	})
 
 	group.Go(func() error {
-		r.Logger.Info("webrtc server started", slog.String("iceserver", r.Config.WebRTCICEServer))
+		r.Logger.Info("webrtc server started", slog.String("iceserver", r.Config.WebrtcConfig.ICEServer))
 		err := r.WebRTCServer.Run(childCtx)
 		if err != nil {
 			r.Logger.Error("webrtc server failed to serve", slog.Any("err", err))
@@ -155,9 +151,9 @@ func (r *Relayer) Run(ctx context.Context) error {
 // RegisterRelayer registers the relayer node with the registry contract.
 func (r *Relayer) RegisterRelayer(ctx context.Context) error {
 	client, err := registry.Dial(ctx, &registry.Config{
-		DialURI:         r.Config.BlockchainRPCAddress,
+		DialURI:         r.Config.DiscoveryConfig.RpcUrl,
 		PrivateKey:      r.Config.PrivateKey,
-		ContractAddress: r.Config.ContractAddress,
+		ContractAddress: r.Config.DiscoveryConfig.ContractAddress,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to connect to Ethereum node: %w", err)
@@ -215,4 +211,26 @@ func handlerWithLoggingAndCors(logger *slog.Logger, next http.Handler) http.Hand
 		next.ServeHTTP(w, clonedReq)
 		loggerMiddlewareAfterServe(logger, clonedReq)
 	})
+}
+
+func webrtcOptionsByConfig(cfg Config) []webrtc.Option {
+	opts := []webrtc.Option{}
+
+	if cfg.WebrtcConfig.UseTrickleICE {
+		opts = append(opts, webrtc.WithTrickleICE())
+	}
+	if cfg.WebrtcConfig.RetryConfig.Enabled {
+		opts = append(opts, webrtc.WithRetry(webrtc.Retry{
+			Count:    cfg.WebrtcConfig.RetryConfig.Count,
+			Interval: cfg.WebrtcConfig.RetryConfig.Interval,
+		}))
+	}
+	if cfg.WebrtcConfig.PeerPortConfig.Enabled {
+		opts = append(opts, webrtc.WithPeerPort(webrtc.PeerRangePort{
+			Min: cfg.WebrtcConfig.PeerPortConfig.Min,
+			Max: cfg.WebrtcConfig.PeerPortConfig.Max,
+		}))
+	}
+
+	return opts
 }

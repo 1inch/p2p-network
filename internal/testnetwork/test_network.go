@@ -114,13 +114,13 @@ func New(ctx context.Context, t *testing.T, relayerCount, resolverCount int, opt
 	cfg := relayer.DefaultConfig()
 
 	if tnCfg.WithNodeRegistry {
-		cfg.WithNodeRegistry = tnCfg.WithNodeRegistry
+		cfg.DiscoveryConfig.WithNodeRegistry = tnCfg.WithNodeRegistry
 	}
 
 	_, _, err := registry.DeployNodeRegistry(context.Background(), &registry.Config{
-		DialURI:         cfg.BlockchainRPCAddress,
+		DialURI:         cfg.DiscoveryConfig.RpcUrl,
 		PrivateKey:      cfg.PrivateKey,
-		ContractAddress: cfg.ContractAddress,
+		ContractAddress: cfg.DiscoveryConfig.ContractAddress,
 	})
 	assert.NoError(t, err, "Failed to create registry client")
 
@@ -283,11 +283,11 @@ func registerResolver(ctx context.Context, t *testing.T, index int, cfg relayer.
 	publicKey := crypto.CompressPubkey(&privKey.PublicKey)
 
 	client, err := registry.Dial(ctx, &registry.Config{
-		DialURI:         cfg.BlockchainRPCAddress,
+		DialURI:         cfg.DiscoveryConfig.RpcUrl,
 		PrivateKey:      privateKey,
-		ContractAddress: cfg.ContractAddress,
+		ContractAddress: cfg.DiscoveryConfig.ContractAddress,
 	})
-	require.NoError(t, err, "failed to connect to %s", cfg.BlockchainRPCAddress)
+	require.NoError(t, err, "failed to connect to %s", cfg.DiscoveryConfig.RpcUrl)
 
 	_ = client.RegisterResolver(ctx, ipAddress, publicKey)
 }

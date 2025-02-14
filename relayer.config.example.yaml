@@ -6,8 +6,9 @@ discovery:
   with_node_registry: false
   contract_address: 0x5fbdb2315678afecb367f032d93f642f64180aa3
 webrtc:
-  ice_server: stun:stun1.l.google.com:19302
   use_trickle_ice: false
+  ice_servers:
+
   retry:
     enabled: true
     count: 5

@@ -133,6 +133,7 @@ func (w *Server) HandleSDP(candidateURL, sessionID string, offer webrtc.SessionD
 	w.logger.Debug("handle sdp", slog.String("sesionID", sessionID))
 
 	pc, err := w.newPeerConnection()
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to create peer connection: %w", err)
 	}

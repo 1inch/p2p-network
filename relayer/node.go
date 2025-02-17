@@ -2,9 +2,11 @@
 package relayer
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -78,7 +80,7 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 			logger.Debug("called /health endpoint")
 		})
 
-		httpServer = httpapi.New(logger.WithGroup("httpapi"), httpListener, corsMiddleware(mux))
+		httpServer = httpapi.New(logger.WithGroup("httpapi"), httpListener, handlerWithLoggingAndCors(logger, mux))
 	}
 
 	var werbrtcServer *webrtcserver.Server
@@ -95,7 +97,9 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 			logger.Error("failed to initialize registry client", slog.Any("err", err))
 			return nil, err
 		}
-		werbrtcServer, err = webrtcserver.New(logger.WithGroup("webrtc"), iceServerByConfig(*cfg), grpc.New(registryClient), sdpRequests, iceCandidates, webrtcOptionsByConfig(*cfg)...)
+
+		werbrtcServer, err = webrtcserver.New(logger.WithGroup("webrtc"), iceServerByConfig(*cfg), grpc.New(logger, registryClient), sdpRequests, iceCandidates, webrtcOptionsByConfig(*cfg)...)
+
 		if err != nil {
 			logger.Error("failed to create webrtc server", slog.Any("err", err))
 			return nil, err
@@ -168,18 +172,49 @@ func (r *Relayer) RegisterRelayer(ctx context.Context) error {
 	return nil
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+func corsMiddleware(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func loggerMiddlewareBeforeServe(logger *slog.Logger, r *http.Request) *http.Request {
+	// cloned http request because only once can be read request body
+	clonedReq := r.Clone(r.Context())
+	logger.Info("receive request", slog.Any("method", r.Method), slog.Any("api", r.URL.Path))
+	logger.Debug("with request", slog.Any("body", func() string {
+		if r.Body != nil {
+			bodyBytes, err := io.ReadAll(r.Body)
+			if err != nil {
+				logger.Debug("failed get request bytes from reader")
+				return ""
+			}
+
+			clonedReq.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
+			return string(bodyBytes)
 		}
+		return "<nil>"
+	}()))
 
-		next.ServeHTTP(w, r)
+	return clonedReq
+}
+
+func loggerMiddlewareAfterServe(logger *slog.Logger, r *http.Request) {
+	logger.Info("request process", slog.Any("method", r.Method), slog.Any("api", r.URL.Path))
+}
+
+func handlerWithLoggingAndCors(logger *slog.Logger, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		corsMiddleware(w, r)
+		clonedReq := loggerMiddlewareBeforeServe(logger, r)
+
+		next.ServeHTTP(w, clonedReq)
+		loggerMiddlewareAfterServe(logger, clonedReq)
 	})
 }
 

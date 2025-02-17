@@ -13,10 +13,17 @@ type Config struct {
 
 // WebrtcConfig represents the configuration for webrtc server
 type WebrtcConfig struct {
-	ICEServer      string         `yaml:"ice_server"`
-	UseTrickleICE  bool           `yaml:"use_trickle_ice"`
-	RetryConfig    RetryConfig    `yaml:"retry"`
-	PeerPortConfig PeerPortConfig `yaml:"port"`
+	ICEServers     []ICEServerConfig `yaml:"ice_servers"`
+	UseTrickleICE  bool              `yaml:"use_trickle_ice"`
+	RetryConfig    RetryConfig       `yaml:"retry"`
+	PeerPortConfig PeerPortConfig    `yaml:"port"`
+}
+
+// ICEServerConfig represents the configuration for ice server
+type ICEServerConfig struct {
+	Url      string `yaml:"url"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
 }
 
 // DiscoveryConfig represents the configuration for discovery service
@@ -55,7 +62,9 @@ func DefaultConfig() Config {
 			ContractAddress:  "0x5fbdb2315678afecb367f032d93f642f64180aa3",
 		},
 		WebrtcConfig: WebrtcConfig{
-			ICEServer: "stun:stun1.l.google.com:19302",
+			ICEServers: []ICEServerConfig{{
+				Url: "stun:stun1.l.google.com:19302",
+			}},
 			RetryConfig: RetryConfig{
 				Enabled: false,
 			},

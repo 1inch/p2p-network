@@ -36,7 +36,9 @@ webrtc:
 - **`private_key`**: The private key belong to the relayer.
 - **`discovery.rpc_url`**:  The rpc endpoint of discovery service, expect ETH blockchain node.
 - **`discovery.contract_address`**: The address where discovery contract is located.
-- **`webrtc.ice_server`**: The ICE server used for WebRTC signaling (e.g., STUN or TURN server).
+- **`webrtc.ice_servers.url`**: The ICE server used for WebRTC signaling (e.g., STUN or TURN url server).
+- **`webrtc.ice_servers.username`**: The username for TURN server.
+- **`webrtc.ice_servers.password`**: The password for TURN server.
 - **`webrtc.retry.enabled`**: The flag for turn on/off retry request if resolver return some error.
 - **`webrtc.retry.count`**: The count of attempt repeated requests.
 - **`webrtc.retry.interval`**: The interval between repeated requests

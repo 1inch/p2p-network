@@ -98,7 +98,7 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 			return nil, err
 		}
 
-		werbrtcServer, err = webrtcserver.New(logger.WithGroup("webrtc"), iceServerByConfig(*cfg), grpc.New(registryClient), sdpRequests, iceCandidates, webrtcOptionsByConfig(*cfg)...)
+		werbrtcServer, err = webrtcserver.New(logger.WithGroup("webrtc"), iceServerByConfig(*cfg), grpc.New(logger, registryClient), sdpRequests, iceCandidates, webrtcOptionsByConfig(*cfg)...)
 
 		if err != nil {
 			logger.Error("failed to create webrtc server", slog.Any("err", err))

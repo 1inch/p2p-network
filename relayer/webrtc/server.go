@@ -67,7 +67,7 @@ type Server struct {
 	retryOpt      *Retry
 	peerPortOpt   *PeerRangePort
 	logger        *slog.Logger
-	ICEServer     string
+	iceServers    []webrtc.ICEServer
 	grpcClient    GRPCClient
 	sdpRequests   <-chan SDPRequest
 	iceCandidates <-chan ICECandidate
@@ -79,21 +79,21 @@ type Server struct {
 // New initializes a new WebRTC server.
 func New(
 	logger *slog.Logger,
-	iceServer string,
+	iceServers []webrtc.ICEServer,
 	client GRPCClient,
 	sdpRequests <-chan SDPRequest,
 	iceICECandidates <-chan ICECandidate,
 	options ...Option,
 ) (*Server, error) {
 
-	if iceServer == "" {
+	if iceServers == nil {
 		return nil, ErrInvalidICEServer
 	}
 
 	srv := &Server{
 		sdpRequests:   sdpRequests,
 		iceCandidates: iceICECandidates,
-		ICEServer:     iceServer,
+		iceServers:    iceServers,
 		grpcClient:    client,
 		connections:   make(map[string]*webrtc.PeerConnection),
 		dataChannels:  make(map[string]*webrtc.DataChannel),
@@ -518,7 +518,7 @@ func (w *Server) newPeerConnection() (*webrtc.PeerConnection, error) {
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(s))
 
 	return api.NewPeerConnection(webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{{URLs: []string{w.ICEServer}}},
+		ICEServers: w.iceServers,
 	})
 }
 

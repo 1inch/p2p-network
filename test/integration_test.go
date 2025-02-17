@@ -27,12 +27,13 @@ import (
 const (
 	httpEndpointToRelayer  = "127.0.0.1:8080"
 	grpcEndpointToResolver = "127.0.0.1:8001"
-	ICEServer              = "stun:stun1.l.google.com:19302"
 	dialURL                = "http://127.0.0.1:8545"
 	privateKey             = "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
 	resolverPrivateKey     = "5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
 	contractAddress        = "0x8464135c8F25Da09e49BC8782676a84730C318bC"
 )
+
+var iceServers = []webrtc.ICEServer{{URLs: []string{"stun:stun.l.google.com:19302"}}}
 
 type positiveTestCase struct {
 	Name                              string
@@ -233,7 +234,7 @@ func setupRelayer(logger *slog.Logger) (chan relayerwebrtc.SDPRequest, chan rela
 		return nil, nil, nil, err
 	}
 
-	server, err := relayerwebrtc.New(logger, ICEServer, relayergrpc.New(logger, registry), sdpRequests, iceCandidates)
+	server, err := relayerwebrtc.New(logger, iceServers, relayergrpc.New(logger, registry), sdpRequests, iceCandidates)
 
 	if err != nil {
 		return nil, nil, nil, err

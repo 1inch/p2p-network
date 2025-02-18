@@ -2,9 +2,11 @@
 package relayer
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -12,7 +14,8 @@ import (
 	"github.com/1inch/p2p-network/internal/registry"
 	"github.com/1inch/p2p-network/relayer/grpc"
 	"github.com/1inch/p2p-network/relayer/httpapi"
-	"github.com/1inch/p2p-network/relayer/webrtc"
+	webrtcserver "github.com/1inch/p2p-network/relayer/webrtc"
+	"github.com/pion/webrtc/v4"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -20,14 +23,18 @@ import (
 type Relayer struct {
 	Config       *Config
 	Logger       *slog.Logger
-	WebRTCServer *webrtc.Server
+	WebRTCServer *webrtcserver.Server
 	HTTPServer   *httpapi.Server
 }
 
 // New initializes a new Relayer instance with provided configuration and logger.
 func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
-	sdpRequests := make(chan webrtc.SDPRequest)
-	iceCandidates := make(chan webrtc.ICECandidate)
+	if len(cfg.WebrtcConfig.ICEServers) == 0 {
+		return nil, webrtcserver.ErrInvalidICEServer
+	}
+
+	sdpRequests := make(chan webrtcserver.SDPRequest)
+	iceCandidates := make(chan webrtcserver.ICECandidate)
 	var httpServer *httpapi.Server
 	{
 		// setup http listener.
@@ -37,13 +44,13 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 			return nil, err
 		}
 		mux := http.NewServeMux()
-		mux.HandleFunc("POST /sdp", webrtc.SDPHandler(logger, sdpRequests))
-		mux.HandleFunc("POST /candidate", webrtc.CandidateHandler(logger, iceCandidates))
+		mux.HandleFunc("POST /sdp", webrtcserver.SDPHandler(logger, sdpRequests))
+		mux.HandleFunc("POST /candidate", webrtcserver.CandidateHandler(logger, iceCandidates))
 		mux.HandleFunc("GET /relayer", func(w http.ResponseWriter, r *http.Request) {
 			client, err := registry.Dial(r.Context(), &registry.Config{
-				DialURI:         cfg.BlockchainRPCAddress,
+				DialURI:         cfg.DiscoveryConfig.RpcUrl,
 				PrivateKey:      cfg.PrivateKey,
-				ContractAddress: cfg.ContractAddress,
+				ContractAddress: cfg.DiscoveryConfig.ContractAddress,
 			})
 			if err != nil {
 				http.Error(w, "failed to connect to Ethereum node", http.StatusInternalServerError)
@@ -73,26 +80,28 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 			logger.Debug("called /health endpoint")
 		})
 
-		httpServer = httpapi.New(logger.WithGroup("httpapi"), httpListener, corsMiddleware(mux))
+		httpServer = httpapi.New(logger.WithGroup("httpapi"), httpListener, handlerWithLoggingAndCors(logger, mux))
 	}
 
-	var werbrtcServer *webrtc.Server
+	var werbrtcServer *webrtcserver.Server
 	{
 		// setup webrtc listener.
 		var err error
 		ctx := context.Background()
 		registryClient, err := registry.Dial(ctx, &registry.Config{
-			DialURI:         cfg.BlockchainRPCAddress,
+			DialURI:         cfg.DiscoveryConfig.RpcUrl,
 			PrivateKey:      cfg.PrivateKey,
-			ContractAddress: cfg.ContractAddress,
+			ContractAddress: cfg.DiscoveryConfig.ContractAddress,
 		})
 		if err != nil {
 			logger.Error("failed to initialize registry client", slog.Any("err", err))
 			return nil, err
 		}
-		werbrtcServer, err = webrtc.New(logger.WithGroup("webrtc"), cfg.WebRTCICEServer, grpc.New(registryClient), sdpRequests, iceCandidates)
+
+		werbrtcServer, err = webrtcserver.New(logger.WithGroup("webrtc"), iceServerByConfig(*cfg), grpc.New(logger, registryClient), sdpRequests, iceCandidates, webrtcOptionsByConfig(*cfg)...)
+
 		if err != nil {
-			logger.Error("failed to create webrtc server", slog.String("iceserver", cfg.WebRTCICEServer), slog.Any("err", err))
+			logger.Error("failed to create webrtc server", slog.Any("err", err))
 			return nil, err
 		}
 	}
@@ -125,7 +134,7 @@ func (r *Relayer) Run(ctx context.Context) error {
 	})
 
 	group.Go(func() error {
-		r.Logger.Info("webrtc server started", slog.String("iceserver", r.Config.WebRTCICEServer))
+		r.Logger.Info("webrtc server started")
 		err := r.WebRTCServer.Run(childCtx)
 		if err != nil {
 			r.Logger.Error("webrtc server failed to serve", slog.Any("err", err))
@@ -147,9 +156,9 @@ func (r *Relayer) Run(ctx context.Context) error {
 // RegisterRelayer registers the relayer node with the registry contract.
 func (r *Relayer) RegisterRelayer(ctx context.Context) error {
 	client, err := registry.Dial(ctx, &registry.Config{
-		DialURI:         r.Config.BlockchainRPCAddress,
+		DialURI:         r.Config.DiscoveryConfig.RpcUrl,
 		PrivateKey:      r.Config.PrivateKey,
-		ContractAddress: r.Config.ContractAddress,
+		ContractAddress: r.Config.DiscoveryConfig.ContractAddress,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to connect to Ethereum node: %w", err)
@@ -163,17 +172,85 @@ func (r *Relayer) RegisterRelayer(ctx context.Context) error {
 	return nil
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+func corsMiddleware(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func loggerMiddlewareBeforeServe(logger *slog.Logger, r *http.Request) *http.Request {
+	// cloned http request because only once can be read request body
+	clonedReq := r.Clone(r.Context())
+	logger.Info("receive request", slog.Any("method", r.Method), slog.Any("api", r.URL.Path))
+	logger.Debug("with request", slog.Any("body", func() string {
+		if r.Body != nil {
+			bodyBytes, err := io.ReadAll(r.Body)
+			if err != nil {
+				logger.Debug("failed get request bytes from reader")
+				return ""
+			}
+
+			clonedReq.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
+			return string(bodyBytes)
 		}
+		return "<nil>"
+	}()))
 
-		next.ServeHTTP(w, r)
+	return clonedReq
+}
+
+func loggerMiddlewareAfterServe(logger *slog.Logger, r *http.Request) {
+	logger.Info("request process", slog.Any("method", r.Method), slog.Any("api", r.URL.Path))
+}
+
+func handlerWithLoggingAndCors(logger *slog.Logger, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		corsMiddleware(w, r)
+		clonedReq := loggerMiddlewareBeforeServe(logger, r)
+
+		next.ServeHTTP(w, clonedReq)
+		loggerMiddlewareAfterServe(logger, clonedReq)
 	})
+}
+
+func iceServerByConfig(cfg Config) []webrtc.ICEServer {
+	iceServers := make([]webrtc.ICEServer, len(cfg.WebrtcConfig.ICEServers))
+
+	for i := range cfg.WebrtcConfig.ICEServers {
+		iceServers[i] = webrtc.ICEServer{
+			URLs:           []string{cfg.WebrtcConfig.ICEServers[i].Url},
+			Username:       cfg.WebrtcConfig.ICEServers[i].Username,
+			Credential:     cfg.WebrtcConfig.ICEServers[i].Password,
+			CredentialType: webrtc.ICECredentialTypePassword,
+		}
+	}
+
+	return iceServers
+}
+
+func webrtcOptionsByConfig(cfg Config) []webrtcserver.Option {
+	opts := []webrtcserver.Option{}
+
+	if cfg.WebrtcConfig.UseTrickleICE {
+		opts = append(opts, webrtcserver.WithTrickleICE())
+	}
+	if cfg.WebrtcConfig.RetryConfig.Enabled {
+		opts = append(opts, webrtcserver.WithRetry(webrtcserver.Retry{
+			Count:    cfg.WebrtcConfig.RetryConfig.Count,
+			Interval: cfg.WebrtcConfig.RetryConfig.Interval,
+		}))
+	}
+	if cfg.WebrtcConfig.PeerPortConfig.Enabled {
+		opts = append(opts, webrtcserver.WithPeerPort(webrtcserver.PeerRangePort{
+			Min: cfg.WebrtcConfig.PeerPortConfig.Min,
+			Max: cfg.WebrtcConfig.PeerPortConfig.Max,
+		}))
+	}
+
+	return opts
 }

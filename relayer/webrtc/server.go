@@ -2,10 +2,13 @@
 package webrtc
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
 
@@ -30,6 +33,9 @@ var (
 	ErrConnectionNotFound = errors.New("connection not found for session")
 )
 
+// Option represents configuration of some server parameters
+type Option func(*Server)
+
 // GRPCClient defines the interface for a gRPC client.
 type GRPCClient interface {
 	Execute(ctx context.Context, publicKey []byte, req *pb.ResolverRequest) (*pb.ResolverResponse, error)
@@ -43,9 +49,10 @@ type RegistryClient interface {
 
 // SDPRequest represents SDP request.
 type SDPRequest struct {
-	SessionID string
-	Offer     webrtc.SessionDescription
-	Response  chan *webrtc.SessionDescription
+	SessionID    string
+	Offer        webrtc.SessionDescription
+	CandidateURL string
+	Response     chan *webrtc.SessionDescription
 }
 
 // ICECandidate represents ICECandidate request.
@@ -56,8 +63,11 @@ type ICECandidate struct {
 
 // Server wraps the webrtc.Server.
 type Server struct {
+	useTrickleICE bool
+	retryOpt      *Retry
+	peerPortOpt   *PeerRangePort
 	logger        *slog.Logger
-	ICEServer     string
+	iceServers    []webrtc.ICEServer
 	grpcClient    GRPCClient
 	sdpRequests   <-chan SDPRequest
 	iceCandidates <-chan ICECandidate
@@ -69,34 +79,61 @@ type Server struct {
 // New initializes a new WebRTC server.
 func New(
 	logger *slog.Logger,
-	iceServer string,
+	iceServers []webrtc.ICEServer,
 	client GRPCClient,
 	sdpRequests <-chan SDPRequest,
 	iceICECandidates <-chan ICECandidate,
+	options ...Option,
 ) (*Server, error) {
 
-	if iceServer == "" {
+	if iceServers == nil {
 		return nil, ErrInvalidICEServer
 	}
 
-	return &Server{
+	srv := &Server{
 		sdpRequests:   sdpRequests,
 		iceCandidates: iceICECandidates,
-		ICEServer:     iceServer,
+		iceServers:    iceServers,
 		grpcClient:    client,
 		connections:   make(map[string]*webrtc.PeerConnection),
 		dataChannels:  make(map[string]*webrtc.DataChannel),
 		logger:        logger,
-	}, nil
+	}
+
+	for _, opt := range options {
+		opt(srv)
+	}
+
+	return srv, nil
+}
+
+// WithRetry added retry option in webrtc server
+func WithRetry(option Retry) Option {
+	return func(s *Server) {
+		s.retryOpt = &option
+	}
+}
+
+// WithPeerPort added peers port option in webrtc server
+func WithPeerPort(option PeerRangePort) Option {
+	return func(s *Server) {
+		s.peerPortOpt = &option
+	}
+}
+
+// WithTrickleICE added send request about candidate
+func WithTrickleICE() Option {
+	return func(s *Server) {
+		s.useTrickleICE = true
+	}
 }
 
 // HandleSDP processes an SDP offer, sets up a PeerConnection, and generates an SDP answer.
-func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*webrtc.SessionDescription, error) {
+func (w *Server) HandleSDP(candidateURL, sessionID string, offer webrtc.SessionDescription) (*webrtc.SessionDescription, error) {
 	w.logger.Debug("handle sdp", slog.String("sesionID", sessionID))
 
-	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{{URLs: []string{w.ICEServer}}},
-	})
+	pc, err := w.newPeerConnection()
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to create peer connection: %w", err)
 	}
@@ -123,6 +160,9 @@ func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*
 		}
 
 		w.logger.Debug("ice candidate found", slog.String("sessionID", sessionID), slog.String("candidate", candidate.String()))
+		if w.useTrickleICE {
+			go w.sendCandidate(candidateURL, sessionID, *candidate)
+		}
 	})
 
 	// Handle DataChannel setup.
@@ -160,7 +200,9 @@ func (w *Server) HandleSDP(sessionID string, offer webrtc.SessionDescription) (*
 	w.connections[sessionID] = pc
 	w.mu.Unlock()
 
-	<-gatherComplete
+	if !w.useTrickleICE {
+		<-gatherComplete
+	}
 
 	return pc.LocalDescription(), nil
 }
@@ -176,7 +218,7 @@ func (w *Server) Run(ctx context.Context) error {
 			if !ok {
 				return nil
 			}
-			answer, err := w.HandleSDP(req.SessionID, req.Offer)
+			answer, err := w.HandleSDP(req.CandidateURL, req.SessionID, req.Offer)
 			if err != nil {
 				w.logger.Error("failed to process sdp offer", slog.Any("err", err))
 				req.Response <- nil
@@ -270,59 +312,36 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 
 		w.logger.Debug("received message", slog.Any("request", message.Request), slog.String("publicKeys", fmt.Sprintf("%x", message.PublicKeys)))
 
-		var wg sync.WaitGroup
+		respMessageChan := make(chan *pb.OutgoingMessage, len(message.PublicKeys))
+
+		waitGroupForRequestGoroutine := &sync.WaitGroup{}
 		for _, publicKey := range message.PublicKeys {
-			wg.Add(1)
-			go func(publicKey []byte) {
-				defer wg.Done()
-
-				response, err := w.grpcClient.Execute(context.Background(), publicKey, message.Request)
-				if err != nil {
-					var errorCode, errorMsg = mapErrorToCodeAndMessage(err)
-
-					respMessage := &pb.OutgoingMessage{
-						Result: &pb.OutgoingMessage_Error{
-							Error: &pb.Error{
-								Code:    errorCode,
-								Message: errorMsg,
-							},
-						},
-						PublicKey: publicKey,
-					}
-					w.logger.Error("failed to execute gRPC request", slog.Any("err", err))
-					if sendErr := w.sendResponse(dc, respMessage); sendErr != nil {
-						w.logger.Error("failed to send error response", slog.Any("err", sendErr))
-					}
-					return
-				}
-
-				respMessage := &pb.OutgoingMessage{
-					Result: &pb.OutgoingMessage_Response{
-						Response: response,
-					},
-					PublicKey: publicKey,
-				}
-
-				w.logger.Debug("sending response", slog.Any("response", response), slog.String("publicKey", fmt.Sprintf("%x", publicKey)))
-
-				if err := w.sendResponse(dc, respMessage); err != nil {
-					respMessage := &pb.OutgoingMessage{
-						Result: &pb.OutgoingMessage_Error{
-							Error: &pb.Error{
-								Code:    pb.ErrorCode_ERR_DATA_CHANNEL_SEND_FAILED,
-								Message: fmt.Sprintf("Failed to send response: %v", err),
-							},
-						},
-						PublicKey: publicKey,
-					}
-					w.logger.Error("failed to send response", slog.Any("err", err))
-					if sendErr := w.sendResponse(dc, respMessage); sendErr != nil {
-						w.logger.Error("failed to send data channel error response", slog.Any("err", sendErr))
-					}
-				}
-			}(publicKey)
+			waitGroupForRequestGoroutine.Add(1)
+			go func() {
+				w.retryGetResponseFromResolver(publicKey, message.Request, respMessageChan)
+				defer waitGroupForRequestGoroutine.Done()
+			}()
 		}
-		wg.Wait()
+		// Waiting when all requests return response (correct, with error, etc)
+		waitGroupForRequestGoroutine.Wait()
+
+		respMessage := w.tryFindCorrectResponse(respMessageChan)
+
+		if err := w.sendResponse(dc, respMessage); err != nil {
+			respMessage := &pb.OutgoingMessage{
+				Result: &pb.OutgoingMessage_Error{
+					Error: &pb.Error{
+						Code:    pb.ErrorCode_ERR_DATA_CHANNEL_SEND_FAILED,
+						Message: fmt.Sprintf("Failed to send response: %v", err),
+					},
+				},
+				PublicKey: respMessage.PublicKey,
+			}
+			w.logger.Error("failed to send response", slog.Any("err", err))
+			if sendErr := w.sendResponse(dc, respMessage); sendErr != nil {
+				w.logger.Error("failed to send data channel error response", slog.Any("err", sendErr))
+			}
+		}
 	})
 }
 
@@ -386,4 +405,152 @@ func mapErrorToCodeAndMessage(err error) (pb.ErrorCode, string) {
 		return pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED, fmt.Sprintf("grpc execution failed: %s", err.Error())
 	}
 	return pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED, fmt.Sprintf("unexpected error: %s", err.Error())
+}
+
+func (w *Server) retryGetResponseFromResolver(publicKey []byte, request *pb.ResolverRequest, respChan chan *pb.OutgoingMessage) {
+	w.logger.Debug("start request to resolver", slog.Any("public_key", string(publicKey)))
+
+	resp := &pb.OutgoingMessage{}
+	retryRequest := uint8(1)
+	requestSleepInterval := time.Duration(0)
+
+	if w.retryOpt != nil {
+		w.logger.Debug("retry requests is enabled, set parameters")
+		retryRequest = w.retryOpt.Count
+		requestSleepInterval = w.retryOpt.Interval
+	}
+	for attempt := range retryRequest {
+		w.logger.Debug("try get response from resolver", slog.Any("attempt", attempt+1), slog.Any("publicKey", string(publicKey)))
+		resp = w.tryGetResponseFromResolver(publicKey, request)
+
+		// if response without error, there is break cycle for attempts and put the message in chan
+		if resp.GetError() == nil {
+			w.logger.Info("success response from resolver")
+			w.logger.Debug("response from resolver without error, put it in channel", slog.Any("publicKey", string(publicKey)))
+			break
+		}
+
+		// But if response with error, check which error that, start sleep and continue cycle for attempts
+		switch {
+		case w.isErrorForRetry(resp.GetError().Code):
+			{
+				w.logger.Debug("resolver returned supported error for retry")
+				w.logger.Debug("start sleep for interval", slog.Any("time_duration", requestSleepInterval))
+				time.Sleep(requestSleepInterval)
+			}
+		// there is no point retry get some response from resolvers, because nothing will change
+		// for example, error when dapps send request with not supported method in api handler
+		default:
+			{
+				w.logger.Error("unsupported error from resolver, retry is not possible", slog.Any("err", resp.GetError().Message))
+				break
+			}
+		}
+	}
+	w.logger.Debug("put OutgoingMessage to response channel", slog.Any("publicKey", resp.PublicKey))
+	respChan <- resp
+}
+
+func (w *Server) isErrorForRetry(errorCode pb.ErrorCode) bool {
+	return errorCode == pb.ErrorCode_ERR_DATA_CHANNEL_SEND_FAILED ||
+		errorCode == pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED ||
+		errorCode == pb.ErrorCode_ERR_RESOLVER_LOOKUP_FAILED
+}
+
+func (w *Server) tryGetResponseFromResolver(publicKey []byte, request *pb.ResolverRequest) *pb.OutgoingMessage {
+	var respMessage *pb.OutgoingMessage
+	response, err := w.grpcClient.Execute(context.Background(), publicKey, request)
+	if err != nil {
+		var errorCode, errorMsg = mapErrorToCodeAndMessage(err)
+
+		respMessage = &pb.OutgoingMessage{
+			Result: &pb.OutgoingMessage_Error{
+				Error: &pb.Error{
+					Code:    errorCode,
+					Message: errorMsg,
+				},
+			},
+			PublicKey: publicKey,
+		}
+		w.logger.Error("failed to execute gRPC request", slog.Any("err", err))
+	} else {
+		respMessage = &pb.OutgoingMessage{
+			Result: &pb.OutgoingMessage_Response{
+				Response: response,
+			},
+			PublicKey: publicKey,
+		}
+	}
+
+	return respMessage
+}
+
+// try find correct response from resolvers, if cant find correct - return someone, probably with error
+func (w *Server) tryFindCorrectResponse(chanWithResp chan *pb.OutgoingMessage) *pb.OutgoingMessage {
+	resps := make([]*pb.OutgoingMessage, len(chanWithResp))
+
+	// rewrite in array responses from channel and check this response is success
+	for i := range resps {
+		resps[i] = <-chanWithResp
+
+		w.logger.Debug("check is response successful", slog.Any("publicKey", resps[i].PublicKey))
+		if resps[i].GetError() == nil {
+			return resps[i]
+		}
+	}
+
+	// if successful response not found, return first respons with error
+	return resps[0]
+}
+
+// create and configure new peer connection
+func (w *Server) newPeerConnection() (*webrtc.PeerConnection, error) {
+	s := webrtc.SettingEngine{}
+
+	if w.peerPortOpt != nil {
+		err := s.SetEphemeralUDPPortRange(w.peerPortOpt.Min, w.peerPortOpt.Max)
+		if err != nil {
+			w.logger.Error("failed set peers port range", slog.Any("err", err.Error()))
+			return nil, err
+		}
+	}
+
+	api := webrtc.NewAPI(webrtc.WithSettingEngine(s))
+
+	return api.NewPeerConnection(webrtc.Configuration{
+		ICEServers: w.iceServers,
+	})
+}
+
+func (w *Server) sendCandidate(candidateURL string, sessionID string, candidate webrtc.ICECandidate) {
+	payload := ICECandidate{
+		SessionID: sessionID,
+		Candidate: candidate,
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		w.logger.Error("failed to marshal candidate payload", slog.String("sessionID", sessionID), slog.Any("err", err))
+		return
+	}
+
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, "POST", candidateURL, bytes.NewReader(data))
+	if err != nil {
+		w.logger.Error("failed to create candidate request", slog.String("sessionID", sessionID), slog.Any("err", err))
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		w.logger.Error("failed to send candidate", slog.String("sessionID", sessionID), slog.Any("err", err))
+		return
+	}
+	defer func() {
+		err := resp.Body.Close
+		w.logger.Error("failed to close response body", slog.String("sessionID", sessionID), slog.Any("err", err))
+	}()
+
+	w.logger.Debug("candidate sent", slog.String("sessionID", sessionID), slog.Any("candidate", candidate), slog.String("status", resp.Status))
 }

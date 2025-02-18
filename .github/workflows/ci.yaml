@@ -61,13 +61,19 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.23.4'
-
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+          
+      - name: Lint code
+        uses: golangci/golangci-lint-action@v6.1.1
         with:
-          version: v1.62
-          args: --timeout 5m
-
+            version: latest
+            install-mode: binary
+            github-token: ${{ secrets.GITHUB_TOKEN }}
+            only-new-issues: false
+            skip-cache: false
+            skip-save-cache: false
+            problem-matchers: false
+            cache-invalidation-interval: 7
+  
       - name: Check compilation
         run: |
           make build

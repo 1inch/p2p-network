@@ -11,6 +11,16 @@ import (
 // SDPHandler handles SDP request.
 func SDPHandler(logger *slog.Logger, sdpRequests chan SDPRequest) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			scheme := "http"
+			if r.TLS != nil {
+				scheme = "https"
+			}
+			origin = scheme + "://" + r.Host
+		}
+		candidateURL := origin + "/candidate"
+
 		var req struct {
 			SessionID string                    `json:"session_id"`
 			Offer     webrtc.SessionDescription `json:"offer"`
@@ -22,9 +32,10 @@ func SDPHandler(logger *slog.Logger, sdpRequests chan SDPRequest) http.HandlerFu
 
 		responseChan := make(chan *webrtc.SessionDescription)
 		sdpRequests <- SDPRequest{
-			SessionID: req.SessionID,
-			Offer:     req.Offer,
-			Response:  responseChan,
+			SessionID:    req.SessionID,
+			Offer:        req.Offer,
+			CandidateURL: candidateURL,
+			Response:     responseChan,
 		}
 
 		answer := <-responseChan

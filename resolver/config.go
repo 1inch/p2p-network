@@ -13,6 +13,12 @@ type InfuraApiConfig struct {
 	Enabled bool   `yaml:"enabled"`
 }
 
+// OneInchApiConfig providers configuration for 1inch api handler
+type OneInchApiConfig struct {
+	Key     string `yaml:"key"`
+	Enabled bool   `yaml:"enabled"`
+}
+
 // ApiConfigs contains API-related configs
 type ApiConfigs struct {
 	Default DefaultApiConfig `yaml:"default"`

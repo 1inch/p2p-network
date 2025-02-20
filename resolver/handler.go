@@ -12,6 +12,7 @@ var (
 	errWrongParamCount    = errors.New("wrong number of params")
 	errEmptyAddress       = errors.New("empty address")
 	errEmptyBlock         = errors.New("empty block")
+	errEmptyChainId       = errors.New("empty chainId")
 )
 
 // ApiHandler provides Process() method for handling JSON payloads

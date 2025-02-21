@@ -8,7 +8,7 @@ discovery:
 webrtc:
   use_trickle_ice: false
   ice_servers:
-
+    - url: stun:stun1.l.google.com:19302
   retry:
     enabled: true
     count: 5

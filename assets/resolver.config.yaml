@@ -9,6 +9,9 @@ apis:
   infura:
     key: "test-key"
     enabled: false
+  1inch:
+    enabled: false
+    key: "test-key"
 metric:
   enabled: true
   port: 8081

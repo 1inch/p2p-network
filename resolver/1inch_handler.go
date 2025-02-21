@@ -12,6 +12,7 @@ import (
 )
 
 var errUnexpectedStatusCode = errors.New("unexpected status code")
+var errUnauthorizedStatusCode = errors.New("unauthorized call api")
 
 const (
 	baseUrl                         = "https://api.1inch.dev/"
@@ -75,6 +76,11 @@ func (h *oneInchApiHandler) getWalletBalance(params []string) (string, error) {
 	if err != nil {
 		h.logger.Error("failed invoking JSON-RPC request", slog.Any("err", err.Error()))
 		return "", err
+	}
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		h.logger.Error("problems with authorization token, returned unauthorized status code")
+		return "", errUnauthorizedStatusCode
 	}
 
 	if resp.StatusCode != http.StatusOK {

@@ -20,18 +20,6 @@ const (
 	contractAddr  = "0x5fbdb2315678afecb367f032d93f642f64180aa3"
 )
 
-func TestDeployContract(t *testing.T) {
-	ctx := context.Background()
-	config := &registry.Config{
-		DialURI:    rpcURL,
-		PrivateKey: privateKeyHex,
-	}
-
-	address, _, err := registry.DeployNodeRegistry(ctx, config)
-	t.Logf("contract address: %s", address)
-	require.NoError(t, err, "contract deployment failed")
-}
-
 func TestRegisterResolver(t *testing.T) {
 	ctx := context.Background()
 	resolverIP := "127.0.0.1:8001"
@@ -59,4 +47,16 @@ func TestRegisterResolver(t *testing.T) {
 
 	require.Equal(t, resolverIP, ip)
 	t.Log("resolver successful registered")
+}
+
+func TestDeployContract(t *testing.T) {
+	ctx := context.Background()
+	config := &registry.Config{
+		DialURI:    rpcURL,
+		PrivateKey: privateKeyHex,
+	}
+
+	address, _, err := registry.DeployNodeRegistry(ctx, config)
+	t.Logf("contract address: %s", address)
+	require.NoError(t, err, "contract deployment failed")
 }

@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,8 +25,12 @@ type oneInchApiHandler struct {
 }
 
 // NewOneInchApiHandler creates an 1inch API handler instance
-func NewOneInchApiHandler() ApiHandler {
-	return &oneInchApiHandler{}
+func NewOneInchApiHandler(cfg OneInchApiConfig, logger *slog.Logger) ApiHandler {
+	return &oneInchApiHandler{
+		cfg:    cfg,
+		logger: logger.WithGroup("1inch-handler-api"),
+		client: http.DefaultClient,
+	}
 }
 
 // Process acts as an API wrapper for JSON payloads coming through gRPC
@@ -61,6 +66,12 @@ func (h *oneInchApiHandler) getWalletBalance(params []string) (string, error) {
 	}
 
 	resp, err := h.client.Do(request)
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			h.logger.Error("failed close response bodys")
+		}
+	}()
 	if err != nil {
 		h.logger.Error("failed invoking JSON-RPC request", slog.Any("err", err.Error()))
 		return "", err
@@ -88,7 +99,7 @@ func (h *oneInchApiHandler) validateRequest(chainId, address string) error {
 
 func (h *oneInchApiHandler) formatHttpRequest(chainId, address string) (*http.Request, error) {
 	requestUrl := baseUrl + fmt.Sprintf(routingFormatToGetWalletBalance, chainId, address)
-	request, err := http.NewRequest(http.MethodGet, requestUrl, nil)
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, requestUrl, nil)
 
 	if err != nil {
 		h.logger.Error("failed create http request", slog.Any("err", err.Error()))
@@ -104,7 +115,6 @@ func (h *oneInchApiHandler) formatHttpRequest(chainId, address string) (*http.Re
 func (h *oneInchApiHandler) decodeBalance(resp *http.Response) (string, error) {
 	var balance string
 
-	defer resp.Body.Close()
 	decoder := json.NewDecoder(resp.Body)
 	err := decoder.Decode(&balance)
 

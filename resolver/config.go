@@ -23,6 +23,7 @@ type OneInchApiConfig struct {
 type ApiConfigs struct {
 	Default DefaultApiConfig `yaml:"default"`
 	Infura  InfuraApiConfig  `yaml:"infura"`
+	OneInch OneInchApiConfig `yaml:"1inch"`
 }
 
 // MetricConfig contain params for configure metrics

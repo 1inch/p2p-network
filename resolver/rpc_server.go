@@ -51,6 +51,10 @@ func newServer(cfg *Config) (*Server, error) {
 		{
 			handler = NewInfuraApiHandler(cfg.Apis.Infura, logger)
 		}
+	case cfg.Apis.OneInch.Enabled:
+		{
+			handler = NewOneInchApiHandler(cfg.Apis.OneInch, logger)
+		}
 	default:
 		logger.Error("expect someone handler api in config")
 		return nil, errNoHandlerApiInConfig

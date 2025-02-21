@@ -85,7 +85,6 @@ func main() {
 							case "1inch":
 								apiConfigs.OneInch.Enabled = true
 								apiConfigs.OneInch.Key = c.String("1inch_key")
-
 							}
 							cfg.Apis = apiConfigs
 						}

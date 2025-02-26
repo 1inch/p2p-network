@@ -312,21 +312,14 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 
 		w.logger.Debug("received message", slog.Any("request", message.Request), slog.String("publicKeys", fmt.Sprintf("%x", message.PublicKeys)))
 
-		respMessageChan := make(chan *pb.OutgoingMessage, len(message.PublicKeys))
+		doneChan := make(chan bool)
+		respChan := make(chan *pb.OutgoingMessage)
 
-		waitGroupForRequestGoroutine := &sync.WaitGroup{}
 		for _, publicKey := range message.PublicKeys {
-			waitGroupForRequestGoroutine.Add(1)
-			go func() {
-				w.retryGetResponseFromResolver(publicKey, message.Request, respMessageChan)
-				defer waitGroupForRequestGoroutine.Done()
-			}()
+			go w.retryGetResponseFromResolver(publicKey, message.Request, doneChan, respChan)
 		}
-		// Waiting when all requests return response (correct, with error, etc)
-		waitGroupForRequestGoroutine.Wait()
 
-		respMessage := w.tryFindCorrectResponse(respMessageChan)
-
+		respMessage := <-respChan
 		if err := w.sendResponse(dc, respMessage); err != nil {
 			respMessage := &pb.OutgoingMessage{
 				Result: &pb.OutgoingMessage_Error{
@@ -407,7 +400,7 @@ func mapErrorToCodeAndMessage(err error) (pb.ErrorCode, string) {
 	return pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED, fmt.Sprintf("unexpected error: %s", err.Error())
 }
 
-func (w *Server) retryGetResponseFromResolver(publicKey []byte, request *pb.ResolverRequest, respChan chan *pb.OutgoingMessage) {
+func (w *Server) retryGetResponseFromResolver(publicKey []byte, request *pb.ResolverRequest, doneChan chan bool, respChan chan *pb.OutgoingMessage) {
 	w.logger.Debug("start request to resolver", slog.Any("public_key", string(publicKey)))
 
 	resp := &pb.OutgoingMessage{}
@@ -420,41 +413,54 @@ func (w *Server) retryGetResponseFromResolver(publicKey []byte, request *pb.Reso
 		requestSleepInterval = w.retryOpt.Interval
 	}
 	for attempt := range retryRequest {
-		w.logger.Debug("try get response from resolver", slog.Any("attempt", attempt+1), slog.Any("publicKey", string(publicKey)))
-		resp = w.tryGetResponseFromResolver(publicKey, request)
-
-		// if response without error, there is break cycle for attempts and put the message in chan
-		if resp.GetError() == nil {
-			w.logger.Info("success response from resolver")
-			w.logger.Debug("response from resolver without error, put it in channel", slog.Any("publicKey", string(publicKey)))
-			break
-		}
-
-		// But if response with error, check which error that, start sleep and continue cycle for attempts
-		switch {
-		case w.isErrorForRetry(resp.GetError().Code):
+		// check doneChan before start try get response from resolver
+		select {
+		case <-doneChan:
 			{
-				w.logger.Debug("resolver returned supported error for retry")
-				w.logger.Debug("start sleep for interval", slog.Any("time_duration", requestSleepInterval))
-				time.Sleep(requestSleepInterval)
+				w.logger.Debug("some gorotine returned response, stop this gorotine")
+				return
 			}
-		// there is no point retry get some response from resolvers, because nothing will change
-		// for example, error when dapps send request with not supported method in api handler
 		default:
 			{
-				w.logger.Error("unsupported error from resolver, retry is not possible", slog.Any("err", resp.GetError().Message))
-				break
+				w.logger.Debug("try get response from resolver", slog.Any("attempt", attempt+1), slog.Any("publicKey", fmt.Sprintf("%x", publicKey)))
+				resp = w.tryGetResponseFromResolver(publicKey, request)
+
+				// if response without error, there is break cycle for attempts and put the message in chan
+				if resp.GetError() == nil {
+					w.logger.Info("success response from resolver")
+					w.logger.Debug("response from resolver without error, put it in channel", slog.Any("publicKey", fmt.Sprintf("%x", publicKey)))
+					break
+				}
+
+				// But if response with error, check which error that, start sleep and continue cycle for attempts
+				switch {
+				case w.isErrorForRetry(resp.GetError().Code):
+					{
+						w.logger.Debug("resolver returned supported error for retry")
+						w.logger.Debug("start sleep for interval", slog.Any("time_duration", requestSleepInterval))
+						time.Sleep(requestSleepInterval)
+					}
+				// there is no point retry get some response from resolvers, because nothing will change
+				// for example, error when dapps send request with not supported method in api handler
+				default:
+					{
+						w.logger.Error("unsupported error from resolver, retry is not possible", slog.Any("err", resp.GetError().Message))
+						break
+					}
+				}
 			}
 		}
 	}
-	w.logger.Debug("put OutgoingMessage to response channel", slog.Any("publicKey", resp.PublicKey))
+	w.logger.Debug("put OutgoingMessage to response channel", slog.Any("publicKey", fmt.Sprintf("%x", publicKey)))
 	respChan <- resp
+	doneChan <- true
 }
 
 func (w *Server) isErrorForRetry(errorCode pb.ErrorCode) bool {
-	return errorCode == pb.ErrorCode_ERR_DATA_CHANNEL_SEND_FAILED ||
-		errorCode == pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED ||
-		errorCode == pb.ErrorCode_ERR_RESOLVER_LOOKUP_FAILED
+	t := errorCode == pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED ||
+		errorCode == pb.ErrorCode_ERR_DATA_CHANNEL_SEND_FAILED
+
+	return t
 }
 
 func (w *Server) tryGetResponseFromResolver(publicKey []byte, request *pb.ResolverRequest) *pb.OutgoingMessage {
@@ -483,24 +489,6 @@ func (w *Server) tryGetResponseFromResolver(publicKey []byte, request *pb.Resolv
 	}
 
 	return respMessage
-}
-
-// try find correct response from resolvers, if cant find correct - return someone, probably with error
-func (w *Server) tryFindCorrectResponse(chanWithResp chan *pb.OutgoingMessage) *pb.OutgoingMessage {
-	resps := make([]*pb.OutgoingMessage, len(chanWithResp))
-
-	// rewrite in array responses from channel and check this response is success
-	for i := range resps {
-		resps[i] = <-chanWithResp
-
-		w.logger.Debug("check is response successful", slog.Any("publicKey", resps[i].PublicKey))
-		if resps[i].GetError() == nil {
-			return resps[i]
-		}
-	}
-
-	// if successful response not found, return first respons with error
-	return resps[0]
 }
 
 // create and configure new peer connection

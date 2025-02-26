@@ -1,9 +1,9 @@
-import { ClientParams, JsonRecquest, JsonResponse, NetworkParams } from "./types";
+import { ClientParams, JsonRequest, JsonResponse, NetworkParams } from "./types";
 import axios from 'axios';
 import * as ecies from "eciesjs";
-import { generateKeyPair, encrypt, decrypt } from "./crypto/util.ts";
-import { ResolverRequestSchema, ResolverResponseSchema } from "./gen/resolver_pb.ts";
-import { IncomingMessageSchema, OutgoingMessageSchema } from "./gen/relayer_pb.ts";
+import { generateKeyPair, encrypt, decrypt } from "./crypto/util";
+import { ResolverRequestSchema, ResolverResponseSchema } from "./gen/resolver_pb";
+import { IncomingMessageSchema, OutgoingMessageSchema } from "./gen/relayer_pb";
 import { createPublicClient, http } from 'viem'
 import { registryAbi } from "./abi/NodeRegistry";
 import { create, toJson, toJsonString, toBinary, fromBinary, fromJsonString} from "@bufbuild/protobuf";
@@ -17,7 +17,7 @@ type PendingRequest = {
 export class Client {
   pc: RTCPeerConnection;
   sendChannel: RTCDataChannel;
-  makingOffer: bool;
+  makingOffer: boolean;
   networkParams: NetworkParams;
   connectionOpened: any;
   connectionClosed: any;
@@ -44,7 +44,7 @@ export class Client {
     sendChannel.onopen = () => this.onopen();
     sendChannel.onclose = () => this.onclose();
 
-    return new Promise<bool>((res, rej) => {
+    return new Promise<boolean>((res, rej) => {
       this.connectionOpened = res;
       this.connectionClosed = rej;
     });
@@ -61,7 +61,7 @@ export class Client {
   }
 
 
-  onicecandidate(candidate) {
+  onicecandidate(candidate: RTCIceCandidate | null) {
     if (candidate !== null) {
       let sessionAndCandidate = {'session_id': 'firefox', 'candidate': candidate}
       this.log(`candidate: ${JSON.stringify(sessionAndCandidate)}`)
@@ -69,7 +69,7 @@ export class Client {
     }
   }
 
-  send(url, msg) {
+  send(url: string, msg: { session_id: string; candidate?: RTCIceCandidate; offer?: RTCSessionDescription | null; }) {
     const headers = {
       'Content-Type': 'application/json'
     }
@@ -79,8 +79,8 @@ export class Client {
     return axios.post(addr, msg, {headers: headers})
   }
 
-  log(msg) {
-    document.getElementById('logs').innerHTML += msg + '<br>'
+  log(msg: string) {
+    document.getElementById('logs')!.innerHTML += msg + '<br>'
   }
 
   async encryptRequest(req: JsonRequest, resolverPubKey: string) {
@@ -122,7 +122,7 @@ export class Client {
     const reqJson = toBinary(IncomingMessageSchema, incomingMsg);
 
     const extractedMsg = fromBinary(IncomingMessageSchema, reqJson);
-    console.log(`requestId: ${extractedMsg.request.id}`);
+    console.log(`requestId: ${extractedMsg.request?.id}`);
     console.log(`publicKeys: ${new TextDecoder().decode(extractedMsg.publicKeys[0])}`);
 
 
@@ -136,7 +136,7 @@ export class Client {
     });
 
     this.log(`pending id: ${req.Id}`)
-    this.pendingRequests[req.Id] = {resolve, reject, privKey};
+    this.pendingRequests.set(req.Id, {resolve, reject, privKey});
     return promise;
   }
 
@@ -144,7 +144,7 @@ export class Client {
     const data = ev.data;
     console.log(`onmessage data: ${ev.data}`);
     console.log(`onmessage type: ${typeof(ev.data)}`);
-    const bytes = await ev.data.bytes();
+    const bytes = new Uint8Array(data);
     const outgoingMsg = fromBinary(OutgoingMessageSchema, bytes);
     const protoResp = outgoingMsg.result;
     console.log(`chan msg: ${JSON.stringify(protoResp)}`)
@@ -153,7 +153,7 @@ export class Client {
       console.log("error in response", protoResp.value);
       return;
     }
-    let pendingReq = this.pendingRequests[protoResp.value.id];
+    let pendingReq = this.pendingRequests.get(protoResp.value.id);
     if (pendingReq == null) {
       return
     }
@@ -184,7 +184,7 @@ export class Client {
     }
   }
 
-  async fetchNetworkParams(clientParams: ClientParams): NetworkParams {
+  async fetchNetworkParams(clientParams: ClientParams): Promise<NetworkParams> {
     const client = createPublicClient({ transport: http(clientParams.providerUrl) });
     const data = await client.readContract({
       address: clientParams.contractAddr,

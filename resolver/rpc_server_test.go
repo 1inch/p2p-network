@@ -135,9 +135,9 @@ type negativeTestCase struct {
 }
 
 func (s *ResolverTestSuite) TestExecuteEncrypted() {
-	relayerKey, err := encryption.GenerateKeyPair(encryption.Secp256k1)
+	relayerKey, err := encryption.GenerateKeyPair()
 	s.Require().NoError(err)
-	relayerPubKey := relayerKey.(*ecies.PrivateKey).PublicKey.Bytes(true)
+	relayerPubKey := relayerKey.PublicKey.Bytes(true)
 
 	encryptedPayload, err := encryption.Encrypt(s.getWalletBalancePayloadOk(), s.resolverPublicKey)
 	s.Require().NoError(err)

@@ -1,3 +1,57 @@
+# API description
+
+## Usage
+API exports a `Client` class that handles interaction with API backend.
+
+Two methods need to be invoked:
+
+- `init(ClientParams)`: initializes the client by connecting to a discovery service
+This discovery service is then used to fetch available relayers and resolvers that will be used for request processing, inside `NetworkParams` object. 
+
+Returns a Promise that is fulfilled once WebRTC connection to relayer is established.
+- `execute(JsonRequest): Promise<JsonResponse>`: this actually executes a request and returns a Promise that will contain a `JsonResponse` upon succesful completion, 
+
+Type descriptions below:
+```typescript
+type NetworkParams = {
+  relayerIp: string,
+  resolverPubKey: string,
+};
+
+
+type ClientParams = {
+  providerUrl: string,
+  contractAddr: string,
+};
+
+export type JsonRequest = {
+  Id: string;
+  Method: string;
+  Params: string[];
+};
+
+export type JsonResponse = {
+  id: string;
+  result: any;
+};
+```
+
+Sample code is in `test.ts` file.
+
+## Flow
+`Client.init()` performs these actions: 
+
+  - fetches relayer/resolver data from smart contract using `ClientParams`
+  - establishes a WebRTC DataChannel connection to the relayer
+
+`Client.execute()` in turn does the following:
+
+- encrypts a request payload with resolve's public key from `NetworkParams` fetched during client initializtion
+- generates its own asymmetric Secp256k1 keypair. It is used for response decryption and gets passed alongside request data. It is unique for each request.
+- submits protobuf wrapping the request through WebRTC DataChannel
+- waits for response on DataChannel's `onmessage` event handler
+- upon receiving the response, decrypts it with the corresponding private key
+
 # How to test
 
 

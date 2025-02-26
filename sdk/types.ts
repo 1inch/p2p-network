@@ -16,8 +16,6 @@ export type JsonRequest = {
 };
 
 export type JsonResponse = {
-  Id: string;
-  Result: any;
+  id: string;
+  result: any;
 };
-
-

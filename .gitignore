@@ -6,3 +6,4 @@ bin
 config.yaml
 
 contracts/bin
+sdk/bun.lock

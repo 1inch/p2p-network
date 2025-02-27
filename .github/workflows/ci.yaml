@@ -145,6 +145,7 @@ jobs:
       - name: Build javascript files
         run: |
           cd sdk
+          bun install
           bun build test.ts --outdir ./build --sourcemap=external
 
       - name: Install node.js dependenies

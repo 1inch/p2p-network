@@ -57,8 +57,8 @@ type SDPRequest struct {
 
 // ICECandidate represents ICECandidate request.
 type ICECandidate struct {
-	SessionID string
-	Candidate webrtc.ICECandidate
+	SessionID string              `json:"session_id"`
+	Candidate webrtc.ICECandidate `json:"candidate"`
 }
 
 // Server wraps the webrtc.Server.

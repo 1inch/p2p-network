@@ -2,6 +2,8 @@
 export type ClientParams = {
   providerUrl: string,
   contractAddr: string,
+  sessionId: string,
+  signalingServer: string,
 };
 
 export type NetworkParams = {

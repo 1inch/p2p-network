@@ -1,12 +1,12 @@
-import { ClientParams, JsonRequest, JsonResponse, NetworkParams } from "./types";
 import axios from 'axios';
 import * as ecies from "eciesjs";
 import { generateKeyPair, encrypt, decrypt } from "./crypto/util";
 import { ResolverRequestSchema, ResolverResponseSchema } from "./gen/resolver_pb";
 import { IncomingMessageSchema, OutgoingMessageSchema } from "./gen/relayer_pb";
-import { createPublicClient, http } from 'viem'
+import { createPublicClient, http } from 'viem';
 import { registryAbi } from "./abi/NodeRegistry";
-import { create, toJson, toJsonString, toBinary, fromBinary, fromJsonString} from "@bufbuild/protobuf";
+import { create, toBinary, fromBinary } from "@bufbuild/protobuf";
+import { ClientParams, JsonRequest, JsonResponse, NetworkParams } from "./types";
 
 type PendingRequest = {
   resolve: any;
@@ -22,8 +22,12 @@ export class Client {
   connectionOpened: any;
   connectionClosed: any;
   pendingRequests: Map<string, PendingRequest>;
+  sessionId: string;
+  signalingServer: string;
 
   constructor(params: ClientParams) {
+    this.sessionId = params.sessionId || 'firefox';
+    this.signalingServer = params.signalingServer || 'http://localhost:3000';
     this.pendingRequests = new Map<string, PendingRequest>();
   }
 
@@ -35,14 +39,16 @@ export class Client {
     this.pc = pc;
 
     pc.onnegotiationneeded = () => this.onnegotiationneeded();
-    pc.onicecandidate = ({candidate}) => this.onicecandidate(candidate)
+    pc.onicecandidate = ({ candidate }) => this.onicecandidate(candidate);
 
     let sendChannel = pc.createDataChannel(defaultChannelName);
     this.sendChannel = sendChannel;
 
-    sendChannel.onmessage = (ev) => this.onmessage(ev);
+    sendChannel.onmessage = ev => this.onmessage(ev);
     sendChannel.onopen = () => this.onopen();
     sendChannel.onclose = () => this.onclose();
+
+    this.pollForCandidates();
 
     return new Promise<boolean>((res, rej) => {
       this.connectionOpened = res;
@@ -60,14 +66,33 @@ export class Client {
       this.connectionClosed(true);
   }
 
-
+  // Trickle ICE: Send local ICE to signaling server
   onicecandidate(candidate: RTCIceCandidate | null) {
     if (candidate !== null) {
-      let sessionAndCandidate = {'session_id': 'firefox', 'candidate': candidate}
-      this.log(`candidate: ${JSON.stringify(sessionAndCandidate)}`)
-      this.send('/candidate', sessionAndCandidate)
+      let sessionAndCandidate = { session_id: this.sessionId, candidate };
+      this.log(`Sending ICE Candidate: ${JSON.stringify(sessionAndCandidate)}`);
+      this.send('/candidate', sessionAndCandidate);
     }
   }
+
+  pollForCandidates() {
+    setInterval(async () => {
+      try {
+        let response = await axios.get(`${this.signalingServer}/candidate/${this.sessionId}`);
+        let candidateList = response.data;
+        for (let candidateData of candidateList) {
+          try {
+            await this.pc.addIceCandidate(new RTCIceCandidate(candidateData));
+          } catch (e) {
+            console.error("Failed to add ICE Candidate:", e);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching remote candidates:", err);
+      }
+    }, 500);
+  }
+
 
   send(url: string, msg: { session_id: string; candidate?: RTCIceCandidate; offer?: RTCSessionDescription | null; }) {
     const headers = {
@@ -95,8 +120,8 @@ export class Client {
 
   async execute(req: JsonRequest): Promise<JsonResponse> {
     this.log("executing request")
-    // Wrap it in ProtoBuf
 
+    // Wrap it in Protobuf
     const reqStrBytesEncrypted = await this.encryptRequest(req, this.networkParams.resolverPubKey);
     console.log("request encrypted");
 
@@ -149,7 +174,7 @@ export class Client {
     const protoResp = outgoingMsg.result;
     console.log(`chan msg: ${JSON.stringify(protoResp)}`)
 
-    if (protoResp.case == "error" || protoResp.case == undefined) {
+    if (protoResp.case == "error" || protoResp.case === undefined) {
       console.log("error in response", protoResp.value);
       return;
     }
@@ -162,7 +187,7 @@ export class Client {
     const payload = await decrypt(privKeyHex, protoResp.value.payload)
     const resp: JsonResponse = JSON.parse(payload);
     console.log(`chan msg result: ${JSON.stringify(resp)}`)
-    
+
     console.log(`resolve id: ${resp.id}`)
     resolve(resp);
     this.pendingRequests.delete(resp.id);
@@ -172,11 +197,12 @@ export class Client {
     try {
       this.makingOffer = true;
       await this.pc.setLocalDescription();
-
-      let sessionAndOffer = {'session_id': 'firefox', 'offer': this.pc.localDescription}
-      let resp = await this.send('/sdp', sessionAndOffer)
-      this.log(`resp: ${JSON.stringify(resp.data)}`)
-      this.pc.setRemoteDescription(resp.data.answer)
+      let sessionAndOffer = { session_id: this.sessionId, offer: this.pc.localDescription };
+      let resp = await this.send('/sdp', sessionAndOffer);
+      this.log(`SDP Response from server: ${JSON.stringify(resp.data)}`);
+      if (resp.data && resp.data.answer) {
+        await this.pc.setRemoteDescription(resp.data.answer);
+      }
     } catch (err) {
       console.error(err);
     } finally {

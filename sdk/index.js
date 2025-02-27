@@ -1,6 +1,13 @@
-const express = require('express')
-const app = express()
-const port = 3000
+const express = require('express');
+const bodyParser = require('body-parser');
+
+const { createCandidateRouter } = require('./router');
+
+const app = express();
+const port = 3000;
+
+app.use(bodyParser.json());
+app.use(createCandidateRouter());
 
 app.get('/', (req, res) => {
   res.send('Hello World!')

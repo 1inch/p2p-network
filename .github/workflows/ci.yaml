@@ -156,7 +156,7 @@ jobs:
       - name: Run node.js server
         run: |
           cd sdk
-          node index.js
+          node index.js &
 
       # - name: Run SDK integration test
       #   run: |

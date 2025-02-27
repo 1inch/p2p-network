@@ -89,6 +89,33 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.23.4'
+      
+      - name: Install node.js with npm
+        uses: actions/setup-node@v4
+        with:
+          node-version: v22.11.0
+
+      - name: Verify node.js Installation
+        run: |
+          node --version
+          npm --version
+
+      - name: Install Chrome browser
+        id: install-chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: 130
+          install-dependencies: true
+      
+      - name: Verify Chrome browser Installation
+        run: |
+          ${{ steps.install-chrome.outputs.chrome-path }} --version
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+       
+      - name: Verify Bun Installation
+        run: bun --version
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1.3.1
@@ -111,6 +138,25 @@ jobs:
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@v1.12.0
 
-      - name: Run tests
+      - name: Run relayer and resolver tests
         run: |
           make testsum
+
+      - name: Build javascript files
+        run: |
+          cd sdk
+          bun build test.ts --outdir ./build --sourcemap=external
+
+      - name: Install node.js dependenies
+        run: |
+          cd sdk
+          npm i
+
+      - name: Run node.js server
+        run: |
+          cd sdk
+          node index.js
+
+      # - name: Run SDK integration test
+      #   run: |
+      #     xvfb-run --auto-servernum 

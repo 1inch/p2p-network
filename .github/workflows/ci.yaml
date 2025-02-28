@@ -100,17 +100,6 @@ jobs:
           node --version
           npm --version
 
-      - name: Install Chrome browser
-        id: install-chrome
-        uses: browser-actions/setup-chrome@v1
-        with:
-          chrome-version: 130
-          install-dependencies: true
-      
-      - name: Verify Chrome browser Installation
-        run: |
-          ${{ steps.install-chrome.outputs.chrome-path }} --version
-
       - name: Install Bun
         uses: oven-sh/setup-bun@v2
        
@@ -142,11 +131,11 @@ jobs:
         run: |
           make testsum
 
-      - name: Build javascript files
+      - name: Build js script for test
         run: |
           cd sdk
           bun install
-          bun build test.ts --outdir ./build --sourcemap=external
+          bun build call_client_script.ts --outdir ./build --sourcemap=external
 
       - name: Install node.js dependenies
         run: |

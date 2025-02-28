@@ -23,7 +23,7 @@ export class Client {
   connectionClosed: any;
   pendingRequests: Map<string, PendingRequest>;
 
-  constructor(params: ClientParams) {
+  constructor() {
     this.pendingRequests = new Map<string, PendingRequest>();
   }
 

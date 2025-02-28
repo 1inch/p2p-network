@@ -68,7 +68,7 @@ node index.js
 2. Compile TypeScript files. Below an example using Bun:
 
 ```
-bun build test.ts --outdir ./build --sourcemap=external --watch
+bun build call_client_script.ts --outdir ./build --sourcemap=external --watch
 ```
 
 ## Contract deployment

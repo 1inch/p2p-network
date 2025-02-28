@@ -1,9 +1,38 @@
 <head>
-    <script src="build/test.js" type="module"></script>
+    <script src="build/call_client_script.js" type="module"></script>
 </head>
 
-<button id="test_execute">
-	Test Execute
-</button>
+<body>
+    <table>
+        <tr>
+            <td>Input your request-ID</td>
+            <td><input type="text" id="input-request-id" size="60" value="TestID"></td>
+        </tr>
+        <tr>
+            <td>Input method name</td>
+            <td><input type="text" id="input-method-name" size="60" value="GetWalletBalance"></td>
+        </tr>
+        <tr>
+            <td>Input params separated by commas</td>
+            <td><input type="text" id="input-params" size="60" value="0x38308C349fd2F9dad31Aa3bFe28015dA3EB67193,latest"></td>
+        </tr>
+    </table>
+    <br>
+    <button id="button-test-execute">
+        Test Execute
+    </button>
+    <br>
+    <lable>Response:</lable>
+    <table>
+        <tr>
+            <th>request-id</th>
+            <th>result</th>
+        </tr>
+        <tr>
+            <td id="td-for-request-id-result"></td>
+            <td id="td-for-result"></td>
+        </tr>
+    </table>
+    <div id="logs"></div>
+</body>
 
-<div id="logs"></div>

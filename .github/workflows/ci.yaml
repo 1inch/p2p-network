@@ -153,11 +153,7 @@ jobs:
           cd sdk
           npm i
 
-      - name: Run node.js server
+      - name: Run SDK integration test
         run: |
           cd sdk
-          node index.js &
-
-      # - name: Run SDK integration test
-      #   run: |
-      #     xvfb-run --auto-servernum 
+          xvfb-run --auto-servernum npm test

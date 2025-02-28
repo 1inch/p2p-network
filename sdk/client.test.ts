@@ -10,7 +10,12 @@ test('send GetWalletBalance request to relayer', async () => {
   let methodName = 'GetWalletBalance';
   let params = ['0x38308C349fd2F9dad31Aa3bFe28015dA3EB67193', 'latest'];
 
-  const browser = await puppeteer.launch();
+  const browser = await puppeteer.launch({
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox'
+    ]
+  });
   const page = await browser.newPage();
 
   await page.goto(webPageForTest);

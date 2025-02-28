@@ -2,6 +2,7 @@ log_level: DEBUG
 http_endpoint: relayer:8080
 private_key: 59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
 discovery:
+  with_node_registry: true
   rpc_url: "http://blockchain:8545"
   contract_address: 0x5fbdb2315678afecb367f032d93f642f64180aa3
 webrtc:

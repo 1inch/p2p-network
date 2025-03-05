@@ -151,7 +151,6 @@ export class Client {
 
     if (protoResp.case == "error" || protoResp.case == undefined) {
       console.log("error in response", protoResp.value);
-      return;
     }
     let pendingReq = this.pendingRequests.get(protoResp.value.id);
     if (pendingReq == null) {

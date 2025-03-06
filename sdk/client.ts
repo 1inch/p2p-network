@@ -4,7 +4,7 @@ import * as ecies from "eciesjs";
 import { generateKeyPair, encrypt, decrypt } from "./crypto/util";
 import { ResolverRequestSchema, ResolverResponseSchema } from "./gen/resolver_pb";
 import { IncomingMessageSchema, OutgoingMessageSchema } from "./gen/relayer_pb";
-import { createPublicClient, http } from 'viem'
+import { Address, createPublicClient, http } from 'viem'
 import { registryAbi } from "./abi/NodeRegistry";
 import { create, toJson, toJsonString, toBinary, fromBinary, fromJsonString} from "@bufbuild/protobuf";
 
@@ -15,15 +15,19 @@ type PendingRequest = {
 }
 
 export class Client {
-  pc: RTCPeerConnection;
-  sendChannel: RTCDataChannel;
-  makingOffer: boolean;
-  networkParams: NetworkParams;
+  pc: RTCPeerConnection | null;
+  sendChannel: RTCDataChannel | null;
+  makingOffer: boolean = false;
+  networkParams: NetworkParams | null;
   connectionOpened: any;
   connectionClosed: any;
   pendingRequests: Map<string, PendingRequest>;
 
-  constructor(params: ClientParams) {
+  constructor() {
+    this.pc = null;
+    this.sendChannel = null;
+    this.makingOffer = false;
+    this.networkParams = null;
     this.pendingRequests = new Map<string, PendingRequest>();
   }
 
@@ -74,7 +78,7 @@ export class Client {
       'Content-Type': 'application/json'
     }
     console.log(`axios posting to url: ${url}`);
-    let addr = "http://" + this.networkParams.relayerIp + url;
+    let addr = "http://" + this.networkParams?.relayerIp + url;
     console.log(`axios posting to addr: ${addr}`);
     return axios.post(addr, msg, {headers: headers})
   }
@@ -97,7 +101,7 @@ export class Client {
     this.log("executing request")
     // Wrap it in ProtoBuf
 
-    const reqStrBytesEncrypted = await this.encryptRequest(req, this.networkParams.resolverPubKey);
+    const reqStrBytesEncrypted = await this.encryptRequest(req, this.networkParams?.resolverPubKey ? this.networkParams.resolverPubKey : "");
     console.log("request encrypted");
 
     const privKey = generateKeyPair();
@@ -111,9 +115,9 @@ export class Client {
     });
     this.log(`protoReq: ${protoReq}`);
 
-    console.log(`create IncomingMessage with resolver key: ${this.networkParams.resolverPubKey}`);
+    console.log(`create IncomingMessage with resolver key: ${this.networkParams?.resolverPubKey}`);
     const incomingMsg = create(IncomingMessageSchema, {
-      publicKeys: [ecies.PublicKey.fromHex(this.networkParams.resolverPubKey).toBytes(true)],
+      publicKeys: [ecies.PublicKey.fromHex(this.networkParams?.resolverPubKey ? this.networkParams?.resolverPubKey : "").toBytes(true)],
       request: protoReq,
     });
     console.log(`incomingMsg: ${JSON.stringify(incomingMsg)}`);
@@ -127,7 +131,7 @@ export class Client {
 
 
     this.log(`reqJson: ${reqJson}`);
-    this.sendChannel.send(reqJson);
+    this.sendChannel?.send(reqJson);
 
     let resolve, reject;
     const promise = new Promise<JsonResponse>((res, rej) => {
@@ -171,12 +175,12 @@ export class Client {
   async onnegotiationneeded() {
     try {
       this.makingOffer = true;
-      await this.pc.setLocalDescription();
+      await this.pc?.setLocalDescription();
 
-      let sessionAndOffer = {'session_id': 'firefox', 'offer': this.pc.localDescription}
+      let sessionAndOffer = {'session_id': 'firefox', 'offer': this.pc?.localDescription}
       let resp = await this.send('/sdp', sessionAndOffer)
       this.log(`resp: ${JSON.stringify(resp.data)}`)
-      this.pc.setRemoteDescription(resp.data.answer)
+      this.pc?.setRemoteDescription(resp.data.answer)
     } catch (err) {
       console.error(err);
     } finally {
@@ -186,13 +190,13 @@ export class Client {
 
   async fetchNetworkParams(clientParams: ClientParams): Promise<NetworkParams> {
     const client = createPublicClient({ transport: http(clientParams.providerUrl) });
-    const data = await client.readContract({
-      address: clientParams.contractAddr,
+    const data: any = await client.readContract({
+      address: clientParams.contractAddr as Address,
       abi: registryAbi,
       functionName: 'getRelayer',
     });
     console.log(`registry res: ${JSON.stringify(data)}`);
-    return {relayerIp: data[0], resolverPubKey: data[1][0]};
+    return {relayerIp: data[0] as string, resolverPubKey: data[1][0]};
   }
 };
 

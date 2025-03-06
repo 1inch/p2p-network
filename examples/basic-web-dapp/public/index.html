@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>WebRTC Data Channel Test</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+        background-color: #f2f2f2;
+      }
+      h1 {
+        color: #333;
+      }
+      #logs {
+        border: 1px solid #ccc;
+        padding: 10px;
+        width: 600px;
+        height: 300px;
+        overflow-y: scroll;
+        margin-bottom: 20px;
+        background-color: #fff;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      textarea, input[type="text"] {
+        width: 600px;
+        padding: 10px;
+        margin-bottom: 10px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        box-sizing: border-box;
+        font-size: 16px;
+      }
+      button {
+        padding: 10px 20px;
+        font-size: 16px;
+        cursor: pointer;
+        border: none;
+        border-radius: 4px;
+        background-color: #4CAF50;
+        color: white;
+        transition: background-color 0.3s ease;
+      }
+      button:hover {
+        background-color: #45a049;
+      }
+      label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+        font-size: 16px;
+      }
+      #publicKeyInput {
+        height: 1rem;
+      }
+      #messageArea {
+        height: 10rem;
+      }
+      .checkbox-container {
+        margin-bottom: 10px;
+      }
+      .checkbox-container label {
+        display: inline-block;
+        margin-right: 20px;
+        font-weight: normal;
+      }
+      .checkbox-container input {
+        margin-right: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>WebRTC Data Channel Test</h1>
+    <div id="logs"></div>
+    
+    <label for="publicKeyInput">Public Key (Hex):</label>
+    <input type="text" id="publicKeyInput" value="039d9031e97dd78ff8c15aa86939de9b1e791066a0224e331bc962a2099a7b1f04" placeholder="Enter public key in hex" />
+    
+    <div class="checkbox-container">
+      <label>
+        <input type="checkbox" id="sendRawCheckbox" />
+        Send Raw Request
+      </label>
+      <label>
+        <input type="checkbox" id="encryptCheckbox" />
+        Encrypt Request
+      </label>
+    </div>
+    
+    <label for="messageArea">Message:</label>
+    <textarea id="messageArea" placeholder="Enter message..."></textarea>
+    
+    <button id="sendBtn">Send</button>
+    
+    <!-- Reference the compiled output from main.ts -->
+    <script type="module" src="/build/main.js"></script>
+  </body>
+</html>

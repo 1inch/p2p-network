@@ -28,10 +28,10 @@ import (
 const (
 	httpEndpointToRelayer  = "127.0.0.1:8080"
 	grpcEndpointToResolver = "127.0.0.1:8001"
-	dialURL                = "http://127.0.0.1:8545"
+	dialURL                = "127.0.0.1:8545"
 	privateKey             = "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
 	resolverPrivateKey     = "5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
-	contractAddress        = "0x8464135c8F25Da09e49BC8782676a84730C318bC"
+	contractAddress        = "0x5fbdb2315678afecb367f032d93f642f64180aa3"
 )
 
 var iceServers = []webrtc.ICEServer{{URLs: []string{"stun:stun.l.google.com:19302"}}}
@@ -227,7 +227,7 @@ func setupRelayer(logger *slog.Logger) (chan relayerwebrtc.SDPRequest, chan rela
 	sdpRequests := make(chan relayerwebrtc.SDPRequest, 1)
 	iceCandidates := make(chan relayerwebrtc.ICECandidate)
 	registry, err := registry.Dial(ctx, &registry.Config{
-		DialURI:         dialURL,
+		DialURI:         fmt.Sprintf("http://%s", dialURL),
 		PrivateKey:      privateKey,
 		ContractAddress: contractAddress,
 	})
@@ -284,6 +284,16 @@ func TestSuccess(t *testing.T) {
 	testnetwork.Run(t, 1, 1, func(tn *testnetwork.TestNetwork) {
 		ctx := context.Background()
 		client := &http.Client{}
+		resolverCfg := &resolver.Config{
+			RpcUrl:          dialURL,
+			GrpcEndpoint:    tn.ResolverNodes[0].Addr(),
+			ContractAddress: contractAddress,
+			PrivateKey:      tn.ResolverPrivateKeys[1],
+		}
+		resolverRegistrationService, err := resolver.NewRegistrationResolver(slog.Default(), resolverCfg)
+		assert.Nil(t, err, "Failed create registration service for resolver")
+		_, err = resolverRegistrationService.Register(ctx)
+		assert.Nil(t, err, "Failed registration resolver")
 		relayerAddress := tn.RelayerNodes[0].HTTPServer.Addr()
 		jsonReq := &types.JsonRequest{
 			Id:     "request-id-1",
@@ -323,7 +333,7 @@ func TestSuccess(t *testing.T) {
 		payload, err := json.Marshal(jsonReq)
 		assert.NoError(t, err, "Failed to marshal JsonRequest")
 
-		privKey, err := crypto.HexToECDSA(tn.ResolverPrivateKeys[0])
+		privKey, err := crypto.HexToECDSA(resolverCfg.PrivateKey)
 		assert.NoError(t, err, "invalid private key")
 		resolverPublicKeyBytes := crypto.CompressPubkey(&privKey.PublicKey)
 
@@ -406,12 +416,15 @@ func TestSuccess(t *testing.T) {
 		err = proto.Unmarshal(respBytes, &outMsg)
 		assert.NoError(t, err, "Failed to unmarshal response")
 
-		if result, ok := outMsg.Result.(*pbrelayer.OutgoingMessage_Response); ok {
-			var jsonResp types.JsonResponse
-			err = json.Unmarshal(result.Response.GetPayload(), &jsonResp)
-			assert.NoError(t, err, "Failed to unmarshal response")
+		assert.Nil(t, outMsg.GetError(), "Unexpected error in OutgoingMessage")
+		resolverResponse := outMsg.GetResponse()
+		assert.Nil(t, resolverResponse.GetError(), "Unexpected error in ResolverResponse")
 
-			assert.Equal(t, 555., jsonResp.Result)
-		}
+		var jsonResp types.JsonResponse
+		err = json.Unmarshal(resolverResponse.GetPayload(), &jsonResp)
+		t.Logf("json response: %s", jsonResp)
+		assert.NoError(t, err, "Failed to unmarshal response")
+
+		assert.Equal(t, 555., jsonResp.Result)
 	})
 }

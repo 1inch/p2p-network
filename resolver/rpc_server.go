@@ -199,6 +199,7 @@ func (s *Server) getErrorCodeByErr(err error) pb.ErrorCode {
 		errors.Is(err, errEmptyPublicKey) ||
 		errors.Is(err, errWrongParamCount) ||
 		errors.Is(err, errUnrecognizedMethod) {
+
 		return pb.ErrorCode_ERR_INVALID_MESSAGE_FORMAT
 	}
 

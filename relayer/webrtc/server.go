@@ -314,7 +314,7 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 		respChan := make(chan *pbrelayer.OutgoingMessage)
 
 		for _, publicKey := range message.PublicKeys {
-			go w.RetryGetResponseFromResolver(publicKey, message.Request, doneChan, respChan)
+			go w.retryGetResponseFromResolver(publicKey, message.Request, doneChan, respChan)
 		}
 
 		respMessage := <-respChan
@@ -377,7 +377,7 @@ func (w *Server) cleanup() {
 	}
 }
 
-func (w *Server) RetryGetResponseFromResolver(publicKey []byte, request *pbresolver.ResolverRequest, doneChan chan bool, respChan chan *pbrelayer.OutgoingMessage) {
+func (w *Server) retryGetResponseFromResolver(publicKey []byte, request *pbresolver.ResolverRequest, doneChan chan bool, respChan chan *pbrelayer.OutgoingMessage) {
 	w.logger.Debug("start request to resolver", slog.Any("public_key", string(publicKey)))
 
 	resp := &pbrelayer.OutgoingMessage{}
@@ -419,16 +419,15 @@ func (w *Server) RetryGetResponseFromResolver(publicKey []byte, request *pbresol
 					w.logger.Debug("start sleep for interval", slog.Any("time_duration", requestSleepInterval))
 					time.Sleep(requestSleepInterval)
 					continue
-				} else {
-					// At this moment, if resolver return any error in ResolverResponse.Error that error not for retry
-					resp = &pbrelayer.OutgoingMessage{
-						PublicKey: publicKey,
-						Result: &pbrelayer.OutgoingMessage_Response{
-							Response: resolverResponse,
-						},
-					}
-					break
 				}
+				// At this moment, if resolver return any error in ResolverResponse.Error that error not for retry
+				resp = &pbrelayer.OutgoingMessage{
+					PublicKey: publicKey,
+					Result: &pbrelayer.OutgoingMessage_Response{
+						Response: resolverResponse,
+					},
+				}
+				break
 			}
 		}
 	}

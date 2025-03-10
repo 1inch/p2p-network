@@ -114,3 +114,7 @@ jobs:
       - name: Run tests
         run: |
           make testsum
+
+      - name: Run integration tests
+        run: |
+        	go test -v github.com/1inch/p2p-network/test 

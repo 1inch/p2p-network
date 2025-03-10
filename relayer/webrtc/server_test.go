@@ -2,7 +2,6 @@ package webrtc_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -216,7 +215,7 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
 				mockGRPCClient.EXPECT().Execute(gomock.Any(), []byte("public-key-1"), gomock.Cond(func(req *pbresolver.ResolverRequest) bool {
 					return req.Id == reqID && string(req.Payload) == "resolver-error"
-				})).Return(nil, errors.New("some error from grpc client"))
+				})).Return(nil, grpc.ErrGRPCExecutionFailed)
 				mockGRPCClient.EXPECT().Close().AnyTimes()
 			},
 			outgoingExpectedErr: &struct {
@@ -224,7 +223,7 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 				errorMsg  string
 			}{
 				errorCode: pbrelayer.ErrorCode_ERR_GRPC_EXECUTION_FAILED,
-				errorMsg:  "failed call execute: some error from grpc client",
+				errorMsg:  "failed call execute: gRPC execution failed",
 			},
 			expectedPickedPubKey: "public-key-1",
 			resolverExpectedResp: nil,
@@ -489,46 +488,7 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 				resolverResponse := outgoingResponseMessage.GetResponse()
 
 				assert.Equal(t, tc.resolverExpectedResp, resolverResponse)
-
 			}
 		})
 	}
 }
-
-// func TestRetry(t *testing.T) {
-// 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-// 		Level: slog.LevelDebug,
-// 	}))
-// 	sdpRequests := make(chan relayerwebrtc.SDPRequest, 1)
-// 	iceCandidates := make(chan relayerwebrtc.ICECandidate)
-
-// 	conn, _ := grpc2.NewClient("127.0.0.1:8001",
-// 		grpc2.WithTransportCredentials(insecure.NewCredentials()),
-// 	)
-
-// 	conns := make(map[string]*grpc2.ClientConn)
-
-// 	pubkey := ""
-// 	id := ""
-
-// 	conns[pubkey] = conn
-
-// 	grpcClient := grpc.New2(
-// 		logger.WithGroup("grpc-server"),
-// 		conns)
-
-// 	server, _ := relayerwebrtc.New(logger, iceServers, grpcClient, sdpRequests, iceCandidates)
-
-// 	doneChan := make(chan bool)
-// 	respChan := make(chan *pbrelayer.OutgoingMessage)
-// 	server.RetryGetResponseFromResolver([]byte(pubkey), &pbresolver.ResolverRequest{
-// 		Id:        id,
-// 		Payload:   []byte{},
-// 		PublicKey: []byte{},
-// 	}, doneChan, respChan)
-
-// 	<-doneChan
-// 	resp := <-respChan
-
-// 	logger.Info(string(resp.PublicKey))
-// }

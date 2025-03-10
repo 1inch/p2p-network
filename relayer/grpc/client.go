@@ -49,14 +49,6 @@ func New(logger *slog.Logger, registryClient *registry.Client) *Client {
 	}
 }
 
-func New2(logger *slog.Logger, conns map[string]*grpc.ClientConn) *Client {
-	return &Client{
-		logger:         logger.WithGroup("grpc-server"),
-		conns:          conns,
-		registryClient: &registry.Client{},
-	}
-}
-
 // Execute wraps the Execute RPC call.
 func (c *Client) Execute(ctx context.Context, publicKey []byte, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
 	conn, err := c.getConn(publicKey)

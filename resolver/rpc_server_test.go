@@ -10,13 +10,12 @@ import (
 	"testing"
 
 	"github.com/1inch/p2p-network/internal/encryption"
-	pb "github.com/1inch/p2p-network/proto"
+	pb "github.com/1inch/p2p-network/proto/resolver"
 	"github.com/1inch/p2p-network/resolver/types"
 	ecies "github.com/ecies/go/v2"
 	gethrpc "github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
@@ -121,7 +120,7 @@ func (s *ResolverTestSuite) TestExecutePositive() {
 	}
 
 	var jsonResp types.JsonResponse
-	err = json.Unmarshal(resp.Payload, &jsonResp)
+	err = json.Unmarshal(resp.GetPayload(), &jsonResp)
 	s.Require().NoError(err)
 	s.Require().Equal(jsonResp.Id, req.Id)
 	s.Require().Equal(jsonResp.Result, defaultBalance)
@@ -130,7 +129,7 @@ func (s *ResolverTestSuite) TestExecutePositive() {
 type negativeTestCase struct {
 	Name            string
 	ResolverRequest *pb.ResolverRequest
-	ExpectedCode    codes.Code
+	ExpectedCode    pb.ErrorCode
 	ExpectedError   error
 }
 
@@ -150,7 +149,7 @@ func (s *ResolverTestSuite) TestExecuteEncrypted() {
 		s.Require().Fail("execute error")
 	}
 
-	decryptedPayload, err := encryption.Decrypt(resp.Payload, relayerKey)
+	decryptedPayload, err := encryption.Decrypt(resp.GetPayload(), relayerKey)
 	s.Require().NoError(err)
 
 	var jsonResp types.JsonResponse
@@ -166,13 +165,13 @@ func (s *ResolverTestSuite) TestExecuteNegativeCases() {
 		{
 			Name:            "UnrecognizedMethodParameter",
 			ResolverRequest: &pb.ResolverRequest{Id: "1", Payload: s.getWalletBalancePayloadUnrecognizedMethod(), Encrypted: false},
-			ExpectedCode:    codes.InvalidArgument,
+			ExpectedCode:    pb.ErrorCode_ERR_INVALID_MESSAGE_FORMAT,
 			ExpectedError:   errUnrecognizedMethod,
 		},
 		{
 			Name:            "NoParameterInPayload",
 			ResolverRequest: &pb.ResolverRequest{Id: "1", Payload: s.getWalletBalancePayloadNoParams(), Encrypted: false},
-			ExpectedCode:    codes.InvalidArgument,
+			ExpectedCode:    pb.ErrorCode_ERR_INVALID_MESSAGE_FORMAT,
 			ExpectedError:   errWrongParamCount,
 		},
 	}
@@ -181,16 +180,13 @@ func (s *ResolverTestSuite) TestExecuteNegativeCases() {
 		s.Run(testCase.Name, func() {
 			s.logger.Info("call execute client method")
 			resp, err := s.client.Execute(context.Background(), testCase.ResolverRequest)
-			s.Require().NotNil(err, "expect error from client")
-			s.Require().Nil(resp, "expect response from client is nil")
+			s.Require().Nil(err, "in realization error cant be returned")
+			s.Require().NotNil(resp, "expeted returned response")
+			s.Require().NotNil(resp.GetError(), "expected error in response")
 
-			statusErr := status.Convert(err)
-
-			resolverResponse := s.getResolverResponse(statusErr)
-			s.Require().NotNil(resolverResponse, "expect resolver response be a first position in status error detais")
-			s.Require().Equal(testCase.ResolverRequest.Id, resolverResponse.Id, "expect that id in request and response is equal")
-			s.Require().Equal(testCase.ExpectedCode, statusErr.Code())
-			s.Require().Equal(testCase.ExpectedError.Error(), statusErr.Message())
+			s.Require().Equal(testCase.ResolverRequest.Id, resp.Id, "expect that id in request and response is equal")
+			s.Require().Equal(testCase.ExpectedCode, resp.GetError().Code)
+			s.Require().Equal(testCase.ExpectedError.Error(), resp.GetError().Message)
 		})
 	}
 }

@@ -10,7 +10,7 @@ import (
 	"sync"
 
 	"github.com/1inch/p2p-network/internal/registry"
-	pb "github.com/1inch/p2p-network/proto"
+	pb "github.com/1inch/p2p-network/proto/resolver"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -46,6 +46,14 @@ func New(logger *slog.Logger, registryClient *registry.Client) *Client {
 		logger:         logger.WithGroup("grpc-server"),
 		conns:          make(map[string]*grpc.ClientConn),
 		registryClient: registryClient,
+	}
+}
+
+func New2(logger *slog.Logger, conns map[string]*grpc.ClientConn) *Client {
+	return &Client{
+		logger:         logger.WithGroup("grpc-server"),
+		conns:          conns,
+		registryClient: &registry.Client{},
 	}
 }
 

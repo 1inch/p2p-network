@@ -13,7 +13,8 @@ import (
 
 	"github.com/1inch/p2p-network/internal/registry"
 	"github.com/1inch/p2p-network/internal/testnetwork"
-	pb "github.com/1inch/p2p-network/proto"
+	pbrelayer "github.com/1inch/p2p-network/proto/relayer"
+	pbresolver "github.com/1inch/p2p-network/proto/resolver"
 	relayergrpc "github.com/1inch/p2p-network/relayer/grpc"
 	relayerwebrtc "github.com/1inch/p2p-network/relayer/webrtc"
 	"github.com/1inch/p2p-network/resolver"
@@ -150,8 +151,8 @@ func testWorkFlowAndReturnResponseChan(t *testing.T, logger *slog.Logger, cfg *r
 	assert.NoError(t, err, "invalid private key")
 	resolverPublicKeyBytes := crypto.CompressPubkey(&privKey.PublicKey)
 
-	req := &pb.IncomingMessage{
-		Request: &pb.ResolverRequest{
+	req := &pbrelayer.IncomingMessage{
+		Request: &pbresolver.ResolverRequest{
 			Id:      jsonReq.Id,
 			Payload: payload,
 		},
@@ -208,13 +209,13 @@ func testWorkFlowAndReturnResponseChan(t *testing.T, logger *slog.Logger, cfg *r
 
 func positiveTestWorkFlow(t *testing.T, logger *slog.Logger, testCase *positiveTestCase) {
 	respBytes := testWorkFlowAndReturnResponseChan(t, logger, testCase.ConfigForResolver, testCase.SessionId, testCase.JsonRequest)
-	var resp pb.OutgoingMessage
+	var resp pbrelayer.OutgoingMessage
 	err := proto.Unmarshal(respBytes, &resp)
 	assert.NoError(t, err, "Failed to unmarshal response")
 
-	if result, ok := resp.Result.(*pb.OutgoingMessage_Response); ok {
+	if result, ok := resp.Result.(*pbrelayer.OutgoingMessage_Response); ok {
 		var jsonResp types.JsonResponse
-		err = json.Unmarshal(result.Response.Payload, &jsonResp)
+		err = json.Unmarshal(result.Response.GetPayload(), &jsonResp)
 		assert.NoError(t, err, "Failed to unmarshal response")
 
 		testCase.FuncCheckActualJsonResponseResult(jsonResp.Result)
@@ -326,8 +327,8 @@ func TestSuccess(t *testing.T) {
 		assert.NoError(t, err, "invalid private key")
 		resolverPublicKeyBytes := crypto.CompressPubkey(&privKey.PublicKey)
 
-		msg := &pb.IncomingMessage{
-			Request: &pb.ResolverRequest{
+		msg := &pbrelayer.IncomingMessage{
+			Request: &pbresolver.ResolverRequest{
 				Id:      jsonReq.Id,
 				Payload: payload,
 			},
@@ -401,13 +402,13 @@ func TestSuccess(t *testing.T) {
 		assert.NoError(t, err, "Failed to set remote description")
 
 		respBytes := <-respChan
-		var outMsg pb.OutgoingMessage
+		var outMsg pbrelayer.OutgoingMessage
 		err = proto.Unmarshal(respBytes, &outMsg)
 		assert.NoError(t, err, "Failed to unmarshal response")
 
-		if result, ok := outMsg.Result.(*pb.OutgoingMessage_Response); ok {
+		if result, ok := outMsg.Result.(*pbrelayer.OutgoingMessage_Response); ok {
 			var jsonResp types.JsonResponse
-			err = json.Unmarshal(result.Response.Payload, &jsonResp)
+			err = json.Unmarshal(result.Response.GetPayload(), &jsonResp)
 			assert.NoError(t, err, "Failed to unmarshal response")
 
 			assert.Equal(t, 555., jsonResp.Result)

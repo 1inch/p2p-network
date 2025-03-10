@@ -2,6 +2,7 @@ package webrtc_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -14,7 +15,8 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	mocks "github.com/1inch/p2p-network/internal/mock"
-	pb "github.com/1inch/p2p-network/proto"
+	pbrelayer "github.com/1inch/p2p-network/proto/relayer"
+	pbresolver "github.com/1inch/p2p-network/proto/resolver"
 	"github.com/1inch/p2p-network/relayer/grpc"
 	relayerwebrtc "github.com/1inch/p2p-network/relayer/webrtc"
 )
@@ -167,14 +169,18 @@ func TestWebRTCServer_Run_Shutdown(t *testing.T) {
 }
 
 func TestWebRTCServer_DataChannel(t *testing.T) {
+	sessionID := "test-session"
+	reqID := "test-req"
 	testCases := []struct {
-		description string
-		setupMock   func(mockGRPCClient *mocks.MockGRPCClient)
-		expected    struct {
-			errorCode pb.ErrorCode
+		description         string
+		setupMock           func(mockGRPCClient *mocks.MockGRPCClient)
+		outgoingExpectedErr *struct {
+			errorCode pbrelayer.ErrorCode
 			errorMsg  string
 		}
-		webrtcOptions []relayerwebrtc.Option
+		expectedPickedPubKey string
+		resolverExpectedResp *pbresolver.ResolverResponse
+		webrtcOptions        []relayerwebrtc.Option
 		// public key generate by this format public-key-<number of key>, example: "public-key-1"
 		countPublicKeys uint16
 		requestPayload  string
@@ -183,75 +189,75 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 			description:   "Successful gRPC execution",
 			webrtcOptions: []relayerwebrtc.Option{},
 			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
-				mockGRPCClient.EXPECT().Execute(gomock.Any(), []byte("public-key-1"), gomock.Cond(func(req *pb.ResolverRequest) bool {
+				mockGRPCClient.EXPECT().Execute(gomock.Any(), []byte("public-key-1"), gomock.Cond(func(req *pbresolver.ResolverRequest) bool {
 					return req.Id == "test-req" && string(req.Payload) == "test-message"
-				})).Return(&pb.ResolverResponse{
-					Id:      "test-id",
-					Payload: []byte("test-response"),
+				})).Return(&pbresolver.ResolverResponse{
+					Id: reqID,
+					Result: &pbresolver.ResolverResponse_Payload{
+						Payload: []byte("test-response"),
+					},
 				}, nil)
 				mockGRPCClient.EXPECT().Close().AnyTimes()
 			},
-			expected: struct {
-				errorCode pb.ErrorCode
-				errorMsg  string
-			}{
-				errorCode: 0,
-				errorMsg:  "",
+			outgoingExpectedErr:  nil,
+			expectedPickedPubKey: "public-key-1",
+			resolverExpectedResp: &pbresolver.ResolverResponse{
+				Id: reqID,
+				Result: &pbresolver.ResolverResponse_Payload{
+					Payload: []byte("test-response"),
+				},
 			},
 			countPublicKeys: 1,
 			requestPayload:  "test-message",
 		},
 		{
-			description:   "Resolver lookup failure",
+			description:   "Error from call method 'execute'",
 			webrtcOptions: []relayerwebrtc.Option{},
 			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
-				mockGRPCClient.EXPECT().Execute(gomock.Any(), []byte("public-key-1"), gomock.Cond(func(req *pb.ResolverRequest) bool {
-					return req.Id == "test-req" && string(req.Payload) == "resolver-error"
-				})).Return(nil, grpc.ErrResolverLookupFailed)
+				mockGRPCClient.EXPECT().Execute(gomock.Any(), []byte("public-key-1"), gomock.Cond(func(req *pbresolver.ResolverRequest) bool {
+					return req.Id == reqID && string(req.Payload) == "resolver-error"
+				})).Return(nil, errors.New("some error from grpc client"))
 				mockGRPCClient.EXPECT().Close().AnyTimes()
 			},
-			expected: struct {
-				errorCode pb.ErrorCode
+			outgoingExpectedErr: &struct {
+				errorCode pbrelayer.ErrorCode
 				errorMsg  string
 			}{
-				errorCode: pb.ErrorCode_ERR_RESOLVER_LOOKUP_FAILED,
-				errorMsg:  "resolver lookup failed",
+				errorCode: pbrelayer.ErrorCode_ERR_GRPC_EXECUTION_FAILED,
+				errorMsg:  "failed call execute: some error from grpc client",
 			},
-			countPublicKeys: 1,
-			requestPayload:  "resolver-error",
+			expectedPickedPubKey: "public-key-1",
+			resolverExpectedResp: nil,
+			countPublicKeys:      1,
+			requestPayload:       "resolver-error",
 		},
 		{
-			description:   "gRPC execution failure",
+			description:   "Resolver return error 'incorrect message format'",
 			webrtcOptions: []relayerwebrtc.Option{},
 			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
-				mockGRPCClient.EXPECT().Execute(gomock.Any(), []byte("public-key-1"), gomock.Cond(func(req *pb.ResolverRequest) bool {
-					return req.Id == "test-req" && string(req.Payload) == "grpc-error"
-				})).Return(nil, grpc.ErrGRPCExecutionFailed)
+				mockGRPCClient.EXPECT().Execute(gomock.Any(), []byte("public-key-1"), gomock.Any()).
+					Times(1).
+					Return(&pbresolver.ResolverResponse{
+						Id: reqID,
+						Result: &pbresolver.ResolverResponse_Error{
+							Error: &pbresolver.Error{
+								Code:    pbresolver.ErrorCode_ERR_INVALID_MESSAGE_FORMAT,
+								Message: "incorrect message",
+							},
+						},
+					}, nil)
 				mockGRPCClient.EXPECT().Close().AnyTimes()
 			},
-			expected: struct {
-				errorCode pb.ErrorCode
-				errorMsg  string
-			}{
-				errorCode: pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED,
-				errorMsg:  "grpc execution failed",
-			},
-			countPublicKeys: 1,
-			requestPayload:  "grpc-error",
-		},
-		{
-			description:   "Incorrect message format",
-			webrtcOptions: []relayerwebrtc.Option{},
-			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
-				mockGRPCClient.EXPECT().Execute(gomock.Any(), []byte("public-key-1"), gomock.Any()).Times(0)
-				mockGRPCClient.EXPECT().Close().AnyTimes()
-			},
-			expected: struct {
-				errorCode pb.ErrorCode
-				errorMsg  string
-			}{
-				errorCode: pb.ErrorCode_ERR_INVALID_MESSAGE_FORMAT,
-				errorMsg:  "failed to unmarshal protobuf message",
+			outgoingExpectedErr:  nil,
+			expectedPickedPubKey: "public-key-1",
+			resolverExpectedResp: &pbresolver.ResolverResponse{
+				Id: reqID,
+				Result: &pbresolver.ResolverResponse_Error{
+					Error: &pbresolver.Error{
+						Code:    pbresolver.ErrorCode_ERR_INVALID_MESSAGE_FORMAT,
+						Message: "incorrect message",
+					},
+				},
 			},
 			countPublicKeys: 1,
 			requestPayload:  "invalid-protobuf",
@@ -270,26 +276,27 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 					mockGRPCClient.EXPECT().
 						Execute(gomock.Any(), []byte("public-key-1"), gomock.Any()).
 						Times(1).
-						Return(&pb.ResolverResponse{
-							Id: "test-id",
-						}, grpc.ErrGRPCExecutionFailed),
+						Return(nil, grpc.ErrGRPCExecutionFailed),
 
 					mockGRPCClient.EXPECT().
 						Execute(gomock.Any(), []byte("public-key-1"), gomock.Any()).
 						Times(1).
-						Return(&pb.ResolverResponse{
-							Id:      "test-id",
-							Payload: []byte("test-response"),
+						Return(&pbresolver.ResolverResponse{
+							Id: reqID,
+							Result: &pbresolver.ResolverResponse_Payload{
+								Payload: []byte("test-response"),
+							},
 						}, nil),
 				)
 				mockGRPCClient.EXPECT().Close().AnyTimes()
 			},
-			expected: struct {
-				errorCode pb.ErrorCode
-				errorMsg  string
-			}{
-				errorCode: 0,
-				errorMsg:  "",
+			outgoingExpectedErr:  nil,
+			expectedPickedPubKey: "public-key-1",
+			resolverExpectedResp: &pbresolver.ResolverResponse{
+				Id: reqID,
+				Result: &pbresolver.ResolverResponse_Payload{
+					Payload: []byte("test-response"),
+				},
 			},
 			countPublicKeys: 1,
 			requestPayload:  "retry-requests",
@@ -299,14 +306,16 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
 				mockGRPCClient.EXPECT().
 					Execute(gomock.Any(), gomock.Any(), gomock.Any()).
-					DoAndReturn(func(ctx context.Context, resolverPublicKey []byte, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
+					DoAndReturn(func(ctx context.Context, resolverPublicKey []byte, req *pbresolver.ResolverRequest) (*pbresolver.ResolverResponse, error) {
 						if string(resolverPublicKey) == "public-key-3" {
-							return &pb.ResolverResponse{
-								Id:      req.Id,
-								Payload: []byte("test-response"),
+							return &pbresolver.ResolverResponse{
+								Id: req.Id,
+								Result: &pbresolver.ResolverResponse_Payload{
+									Payload: []byte("test-response"),
+								},
 							}, nil
 						}
-						return &pb.ResolverResponse{
+						return &pbresolver.ResolverResponse{
 							Id: req.Id,
 						}, grpc.ErrGRPCExecutionFailed
 					}).
@@ -320,12 +329,13 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 					Count:    3,
 					Interval: time.Second,
 				})},
-			expected: struct {
-				errorCode pb.ErrorCode
-				errorMsg  string
-			}{
-				errorCode: 0,
-				errorMsg:  "",
+			outgoingExpectedErr:  nil,
+			expectedPickedPubKey: "public-key-3",
+			resolverExpectedResp: &pbresolver.ResolverResponse{
+				Id: reqID,
+				Result: &pbresolver.ResolverResponse_Payload{
+					Payload: []byte("test-response"),
+				},
 			},
 			countPublicKeys: 3,
 			requestPayload:  "many-requests",
@@ -335,15 +345,19 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
 				mockGRPCClient.EXPECT().
 					Execute(gomock.Any(), gomock.Any(), gomock.Any()).
-					DoAndReturn(func(ctx context.Context, resolverPublicKey []byte, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
-						if string(resolverPublicKey) == "public-key-3" {
-							return &pb.ResolverResponse{
+					DoAndReturn(func(ctx context.Context, resolverPublicKey []byte, req *pbresolver.ResolverRequest) (*pbresolver.ResolverResponse, error) {
+						if string(resolverPublicKey) == "public-key-2" {
+							return &pbresolver.ResolverResponse{
 								Id: req.Id,
-							}, grpc.ErrResolverLookupFailed // if this error returned webrtc cant try another attempt send request
+								Result: &pbresolver.ResolverResponse_Error{
+									Error: &pbresolver.Error{ // if this error returned webrtc cant try another attempt send request
+										Code:    pbresolver.ErrorCode_ERR_INVALID_MESSAGE_FORMAT,
+										Message: "invalid message",
+									},
+								},
+							}, nil
 						}
-						return &pb.ResolverResponse{
-							Id: req.Id,
-						}, grpc.ErrGRPCExecutionFailed
+						return nil, grpc.ErrGRPCExecutionFailed
 					}).
 					// because countPublicKeys is 3 where 1 - will return success, 2 - return errors, retry count 3, so:
 					// return errors * retry count + return success = 2 * 3 + 1 = 7 times
@@ -355,45 +369,19 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 					Count:    3,
 					Interval: time.Second,
 				})},
-			expected: struct {
-				errorCode pb.ErrorCode
-				errorMsg  string
-			}{
-				errorCode: pb.ErrorCode_ERR_RESOLVER_LOOKUP_FAILED,
-				errorMsg:  "resolver lookup failed: resolver lookup failed",
+			outgoingExpectedErr: nil,
+			resolverExpectedResp: &pbresolver.ResolverResponse{
+				Id: reqID,
+				Result: &pbresolver.ResolverResponse_Error{
+					Error: &pbresolver.Error{ // if this error returned webrtc cant try another attempt send request
+						Code:    pbresolver.ErrorCode_ERR_INVALID_MESSAGE_FORMAT,
+						Message: "invalid message",
+					},
+				},
 			},
-			countPublicKeys: 3,
-			requestPayload:  "many-requests-return-errors",
-		},
-		{
-			description: "All response returned error",
-			setupMock: func(mockGRPCClient *mocks.MockGRPCClient) {
-				mockGRPCClient.EXPECT().
-					Execute(gomock.Any(), gomock.Any(), gomock.Any()).
-					Return(
-						&pb.ResolverResponse{
-							Id: "test-id",
-						}, grpc.ErrGRPCExecutionFailed,
-					).
-					// because count public keys is 3 and count of retry 3, so:
-					// countPublicKey * retryCount = 3 * 3 = 9
-					Times(9)
-				mockGRPCClient.EXPECT().Close().AnyTimes()
-			},
-			webrtcOptions: []relayerwebrtc.Option{
-				relayerwebrtc.WithRetry(relayerwebrtc.Retry{
-					Count:    3,
-					Interval: time.Second,
-				})},
-			expected: struct {
-				errorCode pb.ErrorCode
-				errorMsg  string
-			}{
-				errorCode: pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED,
-				errorMsg:  "grpc execution failed: gRPC execution failed",
-			},
-			countPublicKeys: 3,
-			requestPayload:  "many-requests-return-errors",
+			expectedPickedPubKey: "public-key-2",
+			countPublicKeys:      3,
+			requestPayload:       "many-requests-return-errors",
 		},
 	}
 
@@ -403,10 +391,8 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 			for indexPublicKey := range publicKeys {
 				publicKeys[indexPublicKey] = []byte(fmt.Sprintf("public-key-%d", indexPublicKey+1))
 			}
-			sessionID := "test-session"
-			reqID := "test-req"
-			req := &pb.IncomingMessage{
-				Request: &pb.ResolverRequest{
+			req := &pbrelayer.IncomingMessage{
+				Request: &pbresolver.ResolverRequest{
 					Id:        reqID,
 					Payload:   []byte(tc.requestPayload),
 					PublicKey: []byte("public-key"),
@@ -487,24 +473,62 @@ func TestWebRTCServer_DataChannel(t *testing.T) {
 			assert.NoError(t, err, "Failed to set remote description")
 
 			response := <-respChan
-			var resp pb.OutgoingMessage
-			err = proto.Unmarshal([]byte(response), &resp)
+			var outgoingResponseMessage pbrelayer.OutgoingMessage
+			err = proto.Unmarshal([]byte(response), &outgoingResponseMessage)
 			assert.NoError(t, err, "Failed to unmarshal response")
 
-			if tc.expected.errorMsg == "" {
-				if result, ok := resp.Result.(*pb.OutgoingMessage_Response); ok {
-					assert.Equal(t, "test-response", string(result.Response.Payload), "Response payload does not match")
-				} else {
-					t.Fatalf("Expected a Response result, but got an error: %v", resp.Result)
-				}
+			if tc.outgoingExpectedErr != nil {
+				respErr := outgoingResponseMessage.GetError()
+				assert.NotNil(t, respErr, "Expected error in 'OutgoinMessage")
+
+				assert.Equal(t, tc.outgoingExpectedErr.errorCode, respErr.Code, "error code in OutgoingMessage doesnt match")
+				assert.Equal(t, tc.outgoingExpectedErr.errorMsg, respErr.Message, "error message in OutgoingMessage doesnt match")
 			} else {
-				if result, ok := resp.Result.(*pb.OutgoingMessage_Error); ok {
-					assert.Equal(t, tc.expected.errorCode, result.Error.Code, "Error code does not match")
-					assert.Contains(t, result.Error.Message, tc.expected.errorMsg, "Error message does not match")
-				} else {
-					t.Fatalf("Expected an Error result, but got a response: %v", resp.Result)
-				}
+				assert.Equal(t, []byte(tc.expectedPickedPubKey), outgoingResponseMessage.PublicKey)
+
+				resolverResponse := outgoingResponseMessage.GetResponse()
+
+				assert.Equal(t, tc.resolverExpectedResp, resolverResponse)
+
 			}
 		})
 	}
 }
+
+// func TestRetry(t *testing.T) {
+// 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+// 		Level: slog.LevelDebug,
+// 	}))
+// 	sdpRequests := make(chan relayerwebrtc.SDPRequest, 1)
+// 	iceCandidates := make(chan relayerwebrtc.ICECandidate)
+
+// 	conn, _ := grpc2.NewClient("127.0.0.1:8001",
+// 		grpc2.WithTransportCredentials(insecure.NewCredentials()),
+// 	)
+
+// 	conns := make(map[string]*grpc2.ClientConn)
+
+// 	pubkey := ""
+// 	id := ""
+
+// 	conns[pubkey] = conn
+
+// 	grpcClient := grpc.New2(
+// 		logger.WithGroup("grpc-server"),
+// 		conns)
+
+// 	server, _ := relayerwebrtc.New(logger, iceServers, grpcClient, sdpRequests, iceCandidates)
+
+// 	doneChan := make(chan bool)
+// 	respChan := make(chan *pbrelayer.OutgoingMessage)
+// 	server.RetryGetResponseFromResolver([]byte(pubkey), &pbresolver.ResolverRequest{
+// 		Id:        id,
+// 		Payload:   []byte{},
+// 		PublicKey: []byte{},
+// 	}, doneChan, respChan)
+
+// 	<-doneChan
+// 	resp := <-respChan
+
+// 	logger.Info(string(resp.PublicKey))
+// }

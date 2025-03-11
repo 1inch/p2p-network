@@ -298,6 +298,7 @@ func (tn *TestNetwork) registerResolver(ctx context.Context, t *testing.T, index
 	require.NoError(t, err, "failed to register resolver with ip %s and public key= %s", ipAddress, hex.EncodeToString(publicKey))
 }
 
+// GetContractAddress returned contract address which will created for this test network
 func (tn *TestNetwork) GetContractAddress() string {
 	return tn.contractAdress
 }

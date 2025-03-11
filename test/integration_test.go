@@ -284,16 +284,7 @@ func TestSuccess(t *testing.T) {
 	testnetwork.Run(t, 1, 1, func(tn *testnetwork.TestNetwork) {
 		ctx := context.Background()
 		client := &http.Client{}
-		resolverCfg := &resolver.Config{
-			RpcUrl:          dialURL,
-			GrpcEndpoint:    tn.ResolverNodes[0].Addr(),
-			ContractAddress: contractAddress,
-			PrivateKey:      tn.ResolverPrivateKeys[1],
-		}
-		resolverRegistrationService, err := resolver.NewRegistrationResolver(slog.Default(), resolverCfg)
-		assert.Nil(t, err, "Failed create registration service for resolver")
-		_, err = resolverRegistrationService.Register(ctx)
-		assert.Nil(t, err, "Failed registration resolver")
+		resolverPrivKey := tn.ResolverPrivateKeys[0]
 		relayerAddress := tn.RelayerNodes[0].HTTPServer.Addr()
 		jsonReq := &types.JsonRequest{
 			Id:     "request-id-1",
@@ -333,7 +324,7 @@ func TestSuccess(t *testing.T) {
 		payload, err := json.Marshal(jsonReq)
 		assert.NoError(t, err, "Failed to marshal JsonRequest")
 
-		privKey, err := crypto.HexToECDSA(resolverCfg.PrivateKey)
+		privKey, err := crypto.HexToECDSA(resolverPrivKey)
 		assert.NoError(t, err, "invalid private key")
 		resolverPublicKeyBytes := crypto.CompressPubkey(&privKey.PublicKey)
 
@@ -426,5 +417,5 @@ func TestSuccess(t *testing.T) {
 		assert.NoError(t, err, "Failed to unmarshal response")
 
 		assert.Equal(t, 555., jsonResp.Result)
-	})
+	}, testnetwork.WithNodeRegistry())
 }

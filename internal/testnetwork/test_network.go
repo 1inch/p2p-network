@@ -279,5 +279,6 @@ func registerResolver(ctx context.Context, t *testing.T, index int, cfg relayer.
 	})
 	require.NoError(t, err, "failed to connect to %s", cfg.DiscoveryConfig.RpcUrl)
 
-	_ = client.RegisterResolver(ctx, ipAddress, publicKey)
+	err = client.RegisterResolver(ctx, ipAddress, publicKey)
+	require.NoError(t, err, "failed to register resolver with ip %s", ipAddress)
 }

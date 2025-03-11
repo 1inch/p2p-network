@@ -3,6 +3,8 @@ package testnetwork
 
 import (
 	"context"
+	"encoding/hex"
+	"log"
 	"log/slog"
 	"net"
 	"os"
@@ -31,14 +33,24 @@ var (
 		"7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6",
 		"47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a",
 		"8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba",
-	}
-
-	resolverPrivateKeys = []string{
 		"92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e",
 		"4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356",
 		"dbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97",
 		"2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6",
 		"f214f2b2cd398c806f84e317254e0f0b801d0643303237d97a22a48e01628897",
+	}
+
+	resolverPrivateKeys = []string{
+		"701b615bbdfb9de65240bc28bd21bbc0d996645a3dd57e7b12bc2bdf6f192c82",
+		"a267530f49f8280200edf313ee7af6b827f2a8bce2897751d06a843f644967b1",
+		"47c99abed3324a2707c28affff1267e45918ec8c3f20b8aa892e8b065d2942dd",
+		"c526ee95bf44d8fc405a158bb884d9d1238d99f0612e9f33d006bb0789009aaa",
+		"8166f546bab6da521a8369cab06c5d2b9e46670292d85c875ee9ec20e84ffb61",
+		"ea6c44ac03bff858b476bba40716402b03e41b8e97e276d1baec7c37d42484a0",
+		"689af8efa8c651a91ad287602527f3af2fe9f6501a7ac4b061667b5a93e037fd",
+		"de9be858da4a475276426320d5e9262ecfc3ba460bfac56360bfa6c4c28b4ee0",
+		"df57089febbacf7ba0bc227dafbffa9fc08a93fdc68e1e42411a14efcf23656e",
+		"eaa861a9a01391ed3d587d8a5a84ca56ee277629a8b02c22093a419bf240e65d",
 	}
 )
 
@@ -56,6 +68,7 @@ type TestNetwork struct {
 	t                   *testing.T
 	cancelFns           context.CancelFunc
 	wg                  sync.WaitGroup
+	contractAdress      string
 	RelayerCount        int
 	ResolverCount       int
 	ResolverNodes       []*resolver.Resolver
@@ -107,12 +120,13 @@ func New(ctx context.Context, t *testing.T, relayerCount, resolverCount int, opt
 		cfg.DiscoveryConfig.WithNodeRegistry = tnCfg.WithNodeRegistry
 	}
 
-	_, _, err := registry.DeployNodeRegistry(context.Background(), &registry.Config{
-		DialURI:         cfg.DiscoveryConfig.RpcUrl,
-		PrivateKey:      cfg.PrivateKey,
-		ContractAddress: cfg.DiscoveryConfig.ContractAddress,
+	contractAddress, _, err := registry.DeployNodeRegistry(context.Background(), &registry.Config{
+		DialURI:    cfg.DiscoveryConfig.RpcUrl,
+		PrivateKey: cfg.PrivateKey,
 	})
 	assert.NoError(t, err, "Failed to create registry client")
+	testNetwork.contractAdress = contractAddress.String()
+	cfg.DiscoveryConfig.ContractAddress = testNetwork.contractAdress
 
 	var level = new(slog.LevelVar)
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
@@ -148,7 +162,7 @@ func New(ctx context.Context, t *testing.T, relayerCount, resolverCount int, opt
 		require.NoError(testNetwork.t, err)
 
 		testNetwork.GRPCPorts[i] = port
-		registerResolver(ctx, t, i, cfg, resolverNode.Addr())
+		testNetwork.registerResolver(ctx, t, i, cfg, resolverNode.Addr())
 
 		testNetwork.ResolverNodes[i] = resolverNode
 	}
@@ -266,7 +280,7 @@ func getResolverConfig() resolver.Config {
 	}
 }
 
-func registerResolver(ctx context.Context, t *testing.T, index int, cfg relayer.Config, ipAddress string) {
+func (tn *TestNetwork) registerResolver(ctx context.Context, t *testing.T, index int, cfg relayer.Config, ipAddress string) {
 	privateKey := resolverPrivateKeys[index]
 	privKey, err := crypto.HexToECDSA(privateKey)
 	require.NoError(t, err, "invalid private key")
@@ -275,10 +289,15 @@ func registerResolver(ctx context.Context, t *testing.T, index int, cfg relayer.
 	client, err := registry.Dial(ctx, &registry.Config{
 		DialURI:         cfg.DiscoveryConfig.RpcUrl,
 		PrivateKey:      privateKey,
-		ContractAddress: cfg.DiscoveryConfig.ContractAddress,
+		ContractAddress: tn.contractAdress,
 	})
 	require.NoError(t, err, "failed to connect to %s", cfg.DiscoveryConfig.RpcUrl)
 
+	log.Default().Printf("start register resolver with ip= %s, publicKey= %s", ipAddress, hex.EncodeToString(publicKey))
 	err = client.RegisterResolver(ctx, ipAddress, publicKey)
-	require.NoError(t, err, "failed to register resolver with ip %s", ipAddress)
+	require.NoError(t, err, "failed to register resolver with ip %s and public key= %s", ipAddress, hex.EncodeToString(publicKey))
+}
+
+func (tn *TestNetwork) GetContractAddress() string {
+	return tn.contractAdress
 }

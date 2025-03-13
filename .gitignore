@@ -2,6 +2,7 @@ bin
 .vscode
 .idea
 .DS_Store
+sdk/node_modules
 
 config.yaml
 

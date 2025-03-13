@@ -65,7 +65,6 @@ func (h *oneInchApiHandler) getClientByChainId(chainId string) (*balances.Client
 
 // Process acts as an API wrapper for JSON payloads coming through gRPC
 func (h *oneInchApiHandler) Process(req *types.JsonRequest) (*types.JsonResponse, error) {
-
 	switch req.Method {
 	case "GetWalletBalance":
 		balances, err := h.getWalletBalance(req.Params)

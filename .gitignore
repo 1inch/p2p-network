@@ -8,3 +8,5 @@ node_modules
 config.yaml
 
 contracts/bin
+
+examples/basic-web-dapp/dist

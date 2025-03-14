@@ -67,13 +67,14 @@ export class Client {
 
   onicecandidate(candidate: RTCIceCandidate | null) {
     if (candidate !== null) {
-      let sessionAndCandidate = {'session_id': 'firefox', 'candidate': candidate}
+      let sessionAndCandidate = {'session_id': 'firefox', 'candidate': parsePionCandidate(candidate.candidate)}
       this.log(`candidate: ${JSON.stringify(sessionAndCandidate)}`)
       this.send('/candidate', sessionAndCandidate)
     }
   }
 
-  send(url: string, msg: { session_id: string; candidate?: RTCIceCandidate; offer?: RTCSessionDescription | null; }) {
+  // send(url: string, msg: { session_id: string; candidate?: RTCIceCandidate; offer?: RTCSessionDescription | null; }) {
+  send(url: string, msg: { session_id: string; candidate?: any; offer?: RTCSessionDescription | null; }) {
     const headers = {
       'Content-Type': 'application/json'
     }
@@ -200,7 +201,69 @@ export class Client {
   }
 };
 
+function parsePionCandidate(candidateLine: string) {
+  const parts = candidateLine.trim().split(/\s+/);
+  if (!parts[0].startsWith("candidate:") || parts.length < 8) {
+    throw new Error("Invalid ICE candidate string format: " + candidateLine);
+  }
+  const foundation = parts[0].split(":")[1];
+  const component = parseInt(parts[1], 10);
+  const protocol = parts[2];
+  const priority = parseInt(parts[3], 10);
+  const address = parts[4];
+  const port = parseInt(parts[5], 10);
+  if (parts[6] !== "typ") {
+    throw new Error(`Expected 'typ' at position 6 but got: ${parts[6]}`);
+  }
+  const candidateType = parts[7];
 
+  let relatedAddress = "";
+  let relatedPort = 0;
+  let tcpType = "";
+  let i = 8;
+  while (i < parts.length) {
+    switch (parts[i]) {
+      case "raddr":
+        relatedAddress = parts[i + 1] || "";
+        i += 2;
+        break;
+      case "rport":
+        relatedPort = parseInt(parts[i + 1], 10) || 0;
+        i += 2;
+        break;
+      case "tcptype":
+        tcpType = parts[i + 1] || "";
+        i += 2;
+        break;
+      default:
+        i += 1;
+    }
+  }
+
+  return {
+    foundation,
+    priority,
+    address,
+    protocol: parseProtocol(protocol),
+    port,
+    type: candidateType,
+    component,
+    relatedAddress,
+    relatedPort,
+    tcpType,
+  };
+}
+
+function parseProtocol(protocolStr: string) {
+  switch (protocolStr) {
+    case "udp":
+      return 1;
+    case "tcp":
+      return 2;
+    default:
+      return 0;
+  }
+}
 
 const defaultStunServers = ['stun:stun.l.google.com:19302', 'stun:stun.services.mozilla.com'];
 const defaultChannelName = 'default';

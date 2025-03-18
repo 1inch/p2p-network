@@ -174,12 +174,12 @@ The SDK follows a two-stage process:
 
 2. **Request Execution (`execute()`):**
    - The client optionally encrypts the request payload with the resolver's public key (unless encryption is disabled via a flag).
-   - A unique asymmetric Secp256k1 keypair is generated for the request, which is later used for decrypting the response.
+   - A unique ephemeral asymmetric Secp256k1 keypair is generated for the request, which is later used for decrypting the response (ECIES encryption scheme). 
    - The request is wrapped in a Protobuf message and sent over the established WebRTC DataChannel.
    - The client waits for a response on the DataChannel's `onmessage` event.
-   - Upon receiving the response, the client conditionally decrypts it (if marked as encrypted) using the corresponding private key, and then resolves the promise with a `JsonResponse`.
+   - Upon receiving the response, the client conditionally decrypts it (if marked as encrypted) using the client private key, and then resolves the promise with a `JsonResponse` (ECIES encryption scheme).
 
-Below is a Mermaid sequence diagram that illustrates the flow:
+Below is a sequence diagram that illustrates the flow:
 
 ```mermaid
 sequenceDiagram
@@ -250,8 +250,6 @@ The SDK includes a sample web dApp that demonstrates real-world usage of the Cli
     Contains an input field for an address (with a default value) and a greyed-out, read-only result area. Clicking the "Get Balance" button fetches the balance.
   - **Send Funds:**  
     Contains a button to simulate a funds transfer and a result area to display the outcome.
-  - **Get Transactions:**  
-    Contains a button to simulate retrieving transactions and a result area to display the results.
 
 - **Encryption Toggle:**  
   An "Encrypt Request" checkbox allows the user to toggle whether outgoing requests are encrypted.

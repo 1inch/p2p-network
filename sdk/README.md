@@ -19,6 +19,8 @@ cd sdk
 npm i
 ```
 
+---
+
 ## Quick Start
 
 Below is a sample usage that demonstrates how to instantiate the client with a logger, initialize the connection, and execute a request:
@@ -63,6 +65,8 @@ client.init(clientParams)
   })
   .catch(err => console.error("Initialization error:", err));
 ```
+
+---
 
 ## API Reference
 
@@ -163,6 +167,8 @@ export type PendingRequest = {
 }
 ```
 
+---
+
 ## Flow Overview
 
 The SDK follows a two-stage process:
@@ -204,6 +210,8 @@ sequenceDiagram
     C->>C: Process response and resolve Promise
 ```
 
+---
+
 ## Local Setup
 
 ### Local Registry Contract deployment
@@ -230,6 +238,8 @@ bin/relayer run --config ./assets/relayer.config.yaml
 make build_resolver_local
 bin/resolver run --api=infura --infuraKey=a8401733346d412389d762b5a63b0bcf --privateKey=5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a  --grpc_endpoint=127.0.0.1:8001
 ```
+
+---
 
 ## Examples
 

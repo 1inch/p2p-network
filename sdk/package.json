@@ -1,4 +1,12 @@
 {
+  "name": "1inch-p2p-sdk",
+  "version": "0.1.0",
+  "description": "A TypeScript SDK for interacting with 1inch P2P Network",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/1inch/p2p-network.git"
+  },
+  "homepage": "https://github.com/1inch/p2p-network/sdk#readme",
   "devDependencies": {
     "@bufbuild/buf": "^1.49.0",
     "@bufbuild/protoc-gen-es": "^2.2.3",

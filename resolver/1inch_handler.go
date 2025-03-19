@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -11,6 +12,8 @@ import (
 )
 
 const apiUrl = "https://api.1inch.dev"
+
+var errChainIdMustBeNumeric = errors.New("chainid must be numeric")
 
 // oneInchApiHandler represends handler which would call 1inch api
 type oneInchApiHandler struct {
@@ -22,8 +25,9 @@ type oneInchApiHandler struct {
 // NewOneInchApiHandler creates an 1inch API handler instance
 func NewOneInchApiHandler(cfg OneInchApiConfig, logger *slog.Logger) ApiHandler {
 	return &oneInchApiHandler{
-		cfg:    cfg,
-		logger: logger.WithGroup("1inch-handler-api"),
+		cfg:            cfg,
+		logger:         logger.WithGroup("1inch-handler-api"),
+		balanceClients: make(map[string]*balances.Client),
 	}
 }
 
@@ -35,7 +39,7 @@ func (h *oneInchApiHandler) getClientByChainId(chainId string) (*balances.Client
 	chainIdInt, err := strconv.ParseUint(chainId, 10, 64)
 	if err != nil {
 		h.logger.Error("Invalid chainId format", slog.Any("chainId", chainId))
-		return nil, err
+		return nil, errChainIdMustBeNumeric
 	}
 
 	config, err := balances.NewConfiguration(
@@ -97,6 +101,7 @@ func (h *oneInchApiHandler) getWalletBalance(params []string) (interface{}, erro
 		return nil, err
 	}
 
+	//TODO add handler for errors with mapping after receive token
 	resp, err := client.GetBalancesByWalletAddress(
 		context.Background(),
 		balances.BalancesByWalletAddressParams{

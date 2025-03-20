@@ -1,5 +1,5 @@
 import * as ecies from "eciesjs";
-import { Buffer } from 'buffer';
+import { Buffer } from "buffer";
 
 globalThis.Buffer = Buffer;
 

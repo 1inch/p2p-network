@@ -85,7 +85,8 @@ func newServer(cfg *Config) (*Server, error) {
 func (s *Server) Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
 	err := s.validateResolverRequest(req)
 	response := &pb.ResolverResponse{
-		Id: req.Id,
+		Id:        req.Id,
+		Encrypted: req.Encrypted,
 	}
 
 	if err != nil {

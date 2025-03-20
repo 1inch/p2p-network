@@ -101,7 +101,7 @@ func (h *oneInchApiHandler) getWalletBalance(params []string) (interface{}, erro
 		return nil, err
 	}
 
-	//TODO add handler for errors with mapping after receive token
+	// TODO add handler for errors with mapping after receive token
 	resp, err := client.GetBalancesByWalletAddress(
 		context.Background(),
 		balances.BalancesByWalletAddressParams{

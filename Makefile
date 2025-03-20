@@ -77,9 +77,9 @@ deploy_contract:
 	@echo "Deploying contract..."
 	@go test -v -tags=deploy ./contracts -run ^TestDeployContract$
 
-.PHONY: register_resolver
-register_resolver:
-	@go test -v -tags=deploy ./contracts -run ^TestRegisterResolver$
+.PHONY: register_nodes
+register_nodes:
+	@go test -v -tags=deploy ./contracts -run ^TestRegisterNodes$
 
 .PHONY: test_quick
 test_quick:

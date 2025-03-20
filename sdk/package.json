@@ -18,7 +18,7 @@
   "dependencies": {
     "@bufbuild/protobuf": "^2.2.3",
     "@roamhq/wrtc": "^0.8.0",
-    "axios": "^1.7.9",
+    "axios": "^1.8.2",
     "buffer": "^6.0.3",
     "eciesjs": "^0.4.13",
     "express": "^4.21.2",

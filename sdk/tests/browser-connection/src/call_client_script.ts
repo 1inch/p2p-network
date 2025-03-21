@@ -1,12 +1,20 @@
-import { JsonRequest, JsonResponse } from './types'
-import { Client } from "./client";
+import { JsonRequest, JsonResponse } from '../../../types'
+import { Client } from "../../../client";
 
+
+const defaultLogger = {
+  debug: (...args: any[]) => console.log(`DEBUG, ${args.join(" ")}`),
+  info: (...args: any[]) => console.log(`INFO ${args.join(" ")}`),
+  warn: (...args: any[]) => console.log(`WARNING ${args.join(" ")}`),
+  error: (...args: any[]) => console.log(`ERROR ${args.join(" ")}`)
+};
 
 // I added tags for input parameters for request. It is need for test. 
 // In test you can check expected and actual result without hardcode
 // I left default volumes in input tags.
 async function callExecute() {
-  let client = new Client();
+  
+  let client = new Client(defaultLogger);
   await client.init({
     providerUrl: "http://localhost:8545",
     contractAddr: "0x5FbDB2315678afecb367f032d93F642f64180aa3"

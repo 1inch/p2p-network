@@ -230,7 +230,7 @@ make register_nodes
 
 ```
 make build_relayer_local
-bin/relayer run --config ./assets/relayer.config.yaml
+bin/relayer run --config ./relayer.config.example.yaml
 ```
 
 ### Run resolver node

@@ -2,7 +2,7 @@ import { ClientParams, JsonRequest, JsonResponse, NetworkParams, Logger, Pending
 import axios from 'axios';
 import * as ecies from "eciesjs";
 import { generateKeyPair, encrypt, decrypt } from "./crypto/util";
-import { ResolverRequestSchema, ResolverResponse, ResolverResponseSchema } from "./gen/resolver_pb";
+import { Error as ResolverError, ResolverRequestSchema, ResolverResponse } from "./gen/resolver_pb";
 import { IncomingMessageSchema, OutgoingMessageSchema } from "./gen/relayer_pb";
 import { Address, createPublicClient, http } from 'viem'
 import { registryAbi } from "./abi/NodeRegistry";
@@ -197,6 +197,7 @@ export class Client {
       return;
     }
 
+    this.logger.debug("Response without error");
     if (!protoResp.value || typeof protoResp.value !== "object" || !("id" in protoResp.value)) {
       this.logger.warn("Invalid response: missing id", protoResp.value);
       return;
@@ -210,9 +211,20 @@ export class Client {
     const { resolve, reject, privKey } = pendingReq;
     const privKeyHex = privKey.toHex();
     
-    if (successResp.encrypted || !this.tryParse(successResp.payload)) {
-      try {
-        const payload = await decrypt(privKeyHex, successResp.payload);
+    // If ResolverResponse has some a error, reject pending request and give away this error
+    if (successResp.result.case === "error" || successResp.result.case === undefined) {
+      const error = successResp.result.value as ResolverError
+
+      this.logger.error(`Received a response with an error on the 'Resolver', error message: ${error.message}, error code: ${error.code}`)
+      pendingReq.reject(new Error(`Received a response with an error on the 'Resolver': ${error.message}`))
+      this.pendingRequests.delete(successResp.id)
+      return
+    }
+
+    const responseValue = successResp.result.value;
+    if (successResp.encrypted || !this.tryParse(responseValue)) {
+      try {   
+        const payload = await decrypt(privKeyHex, responseValue);
         const resp: JsonResponse = JSON.parse(payload);
         this.logger.info("Channel message result processed (decrypted)");
         this.logger.debug("Processed response:", JSON.stringify(resp));
@@ -226,7 +238,7 @@ export class Client {
       }
     } else {
       try {
-        const payload = new TextDecoder().decode(successResp.payload);
+        const payload = new TextDecoder().decode(responseValue);
         const resp: JsonResponse = JSON.parse(payload);
         this.logger.info("Channel message result processed (unencrypted)");
         this.logger.debug("Processed response:", JSON.stringify(resp));

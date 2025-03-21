@@ -120,9 +120,9 @@ jobs:
         run: |
           make deploy_contract
 
-      - name: Register Resolver
+      - name: Register Nodes
         run: |
-          make register_resolver
+          make register_nodes
 
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@v1.12.0

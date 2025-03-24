@@ -127,6 +127,7 @@ jobs:
 
       - name: Install dependenies
         run: |
+          cd sdk && npm i
           cd sdk/tests/browser-connection && npm i
 
       - name: Start relayer for SDK test

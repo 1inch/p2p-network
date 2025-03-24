@@ -8,17 +8,9 @@
   },
   "homepage": "https://github.com/1inch/p2p-network/sdk#readme",
   "devDependencies": {
-    "@babel/core": "^7.26.9",
-    "@babel/preset-env": "^7.26.9",
-    "@babel/preset-typescript": "^7.26.0",
     "@bufbuild/buf": "^1.49.0",
     "@bufbuild/protoc-gen-es": "^2.2.3",
-    "@types/jest": "^29.5.14",
-    "babel-jest": "^29.7.0",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.2.6",
     "@types/express": "^5.0.0",
-    "ts-node": "^10.9.2",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
   },
@@ -29,14 +21,8 @@
     "buffer": "^6.0.3",
     "eciesjs": "^0.4.13",
     "express": "^4.21.2",
-    "jest-puppeteer": "^11.0.0",
     "nodemon": "^3.1.9",
     "protobufjs": "^7.4.0",
-    "puppeteer": "^24.3.0",
-    "puppeteer-core": "^24.3.0",
     "viem": "^2.22.22"
-  },
-  "scripts": {
-    "test": "jest"
   }
 }

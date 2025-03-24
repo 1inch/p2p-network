@@ -1,3 +1,9 @@
+export interface Logger {
+  info: (...args: any[]) => void;
+  warn: (...args: any[]) => void;
+  error: (...args: any[]) => void;
+  debug: (...args: any[]) => void;
+}
 
 export type ClientParams = {
   providerUrl: string,
@@ -21,3 +27,9 @@ export type JsonResponse = {
   id: string;
   result: any;
 };
+
+export type PendingRequest = {
+  resolve: any;
+  reject: any;
+  privKey: any;
+}

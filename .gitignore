@@ -2,7 +2,11 @@ bin
 .vscode
 .idea
 .DS_Store
+sdk/node_modules
+node_modules
 
 config.yaml
 
 contracts/bin
+
+examples/basic-web-dapp/dist

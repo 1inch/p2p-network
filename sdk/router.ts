@@ -14,7 +14,7 @@ const candidateStore = new Map<string, RTCIceCandidate[]>();
 export function createCandidateRouter(): Router {
   const router = Router();
 
-  router.post('/candidate', (req: Request<unknown, unknown, CandidateBody, any>, res: Response) => {
+  router.post('/candidate', (req: any, res: any) => {
     try {
       const { session_id, candidate } = req.body;
       if (!session_id || !candidate) {

@@ -2,8 +2,8 @@
     "name": "browser-connection-tests",
     "version": "1.0.0",
     "scripts": {
-        "start": "vite",
-        "build": "vite build"
+        "test": "jest",
+        "dev": "vite"
     },
     "dependencies": {
         "@my-org/my-sdk": "file:../../sdk"

@@ -145,7 +145,7 @@ jobs:
         run: |
           make run_resolver_local &
 
-      - name: Run SDK integration test
+      - name: Run SDK browser test
         run: |
-          cd sdk/tests/
+          cd sdk/tests/browser-connection
           xvfb-run --auto-servernum npm test

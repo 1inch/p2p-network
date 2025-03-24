@@ -1,6 +1,6 @@
 import puppeteer, { Browser, Page } from 'puppeteer';
 
-const webPageForTest = "http://localhost:3000/index.html"
+const webPageForTest = "http://localhost:5173"
 const inputIdForRequestIdResult = "input-request-id-result"
 const inputIdForResult = "input-result"
 

@@ -1,7 +1,7 @@
 module.exports = {
   server: {
-    command: "npm run build && npm run start",
+    command: "npm run dev",
     port: 5173,
-    launchTimeout: 10000,
+    launchTimeout: 100000,
   },
 }

@@ -75,10 +75,12 @@ testsum:
 .PHONY: deploy_contract
 deploy_contract:
 	@echo "Deploying contract..."
+	@go clean -testcache
 	@go test -v -tags=deploy ./contracts -run ^TestDeployContract$
 
 .PHONY: register_nodes
 register_nodes:
+	@go clean -testcache
 	@go test -v -tags=deploy ./contracts -run ^TestRegisterNodes$
 
 .PHONY: test_quick

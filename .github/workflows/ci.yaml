@@ -135,7 +135,6 @@ jobs:
         run: |
           cd sdk/tests/browser-connection
           npm i
-          npm run build
 
       - name: Start relayer for SDK test
         run: |

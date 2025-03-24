@@ -154,11 +154,11 @@ async function getResponseFromPage(page: Page): Promise<Response> {
 }
 
 async function inputValueInInputOnPage(page: Page,  inputId: string, newValue: string) {
-  await page.$eval(`#${inputId}`, (element, value) => element.value = value, newValue);
+  await page.$eval(`#${inputId}`, (element, value) => (element as HTMLInputElement).value = value, newValue);
 }
 
 async function getValueFromInputOnPage(page: Page, inputId: string): Promise<string> {
-  return await page.$eval(`#${inputId}`, element => element.value);
+  return await page.$eval(`#${inputId}`, element =>  (element as HTMLInputElement).value);
 }
 
 function mapParamsForInput(params: string[]): string {

@@ -1,9 +1,8 @@
 autofix: false
 ignore:
   - .git/
-  - sdk/gen
-  - sdk/build
-  - sdk/node_modules
+  - /**/node_modules
+  - /**/*_pb.ts
 
 rules:
   # checks if file ends in a newline character

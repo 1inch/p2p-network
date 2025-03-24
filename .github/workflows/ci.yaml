@@ -133,25 +133,19 @@ jobs:
 
       - name: Install dependenies
         run: |
-          cd sdk
+          cd sdk/tests/browser-connection
           npm i
-
-      - name: Build js script for test
-        run: |
-          cd sdk
-          bun build call_client_script.ts --outdir ./build --sourcemap=external
+          npm run build
 
       - name: Start relayer for SDK test
         run: |
-          make build_relayer_local
-          bin/relayer run --config relayer.config.example.yaml &
+          make run_relayer_local &
 
       - name: Start resolver for SDK test
         run: |
-          make build_resolver_local
-          bin/resolver run --api=infura --infuraKey=a8401733346d412389d762b5a63b0bcf --privateKey=5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a  --grpc_endpoint=127.0.0.1:8001 &
+          make run_resolver_local &
 
       - name: Run SDK integration test
         run: |
-          cd sdk
+          cd sdk/tests/
           xvfb-run --auto-servernum npm test

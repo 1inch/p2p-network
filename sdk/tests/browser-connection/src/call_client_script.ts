@@ -31,21 +31,27 @@ async function callExecute() {
 }
 
 window.onload = async (ev) => {
-  document.getElementById('button-test-execute').onclick = callExecute
+  document.getElementById('button-test-execute')!.onclick = callExecute
 }
 
 function getRequestIdFromInput(): string {
-  return document.getElementById('input-request-id')?.value;
+  return getValueFromForm('input-request-id');
 }
 
 function getMethodFromInput(): string {
-  return document.getElementById("input-method-name")?.value;
+  return getValueFromForm("input-method-name");
 }
 
 function getParamsFromInput(): string[] {
-  let paramsStr = document.getElementById("input-params")?.value
-  
+  let paramsStr = getValueFromForm("input-params")
   return paramsStr.split(",")
+}
+
+function getValueFromForm(formId: string): string {
+  let form = document.getElementById(formId)
+  if (form) 
+    return (form as HTMLFormElement).value
+  throw new Error(`Form with Id: ${formId}, not found on test intex.html`)
 }
 
 function setResponseToDoc(resp: JsonResponse) {

@@ -117,5 +117,11 @@ stop-anvil:
 		echo "No Anvil processes found."; \
 	fi
 
+run_relayer_local: build_relayer_local
+	bin/relayer run --config relayer.config.example.yaml
+
+run_resolver_local: build_resolver_local
+	bin/resolver run --api=infura --infuraKey=a8401733346d412389d762b5a63b0bcf --privateKey=5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a  --grpc_endpoint=127.0.0.1:8001
+
 test-integration:
 	go test -v github.com/1inch/p2p-network/test 

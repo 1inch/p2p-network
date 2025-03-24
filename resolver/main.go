@@ -9,7 +9,7 @@ import (
 	"net"
 	"net/http"
 
-	pb "github.com/1inch/p2p-network/proto"
+	pb "github.com/1inch/p2p-network/proto/resolver"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/sdk/metric"

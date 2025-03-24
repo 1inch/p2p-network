@@ -20,7 +20,8 @@ golang-deps:
 	@go install go.uber.org/mock/mockgen@latest
 
 protobuf:
-	protoc -I=./proto --go_out=./proto --go-grpc_out=./proto proto/*.proto
+	protoc -I=./proto --go_out=paths=source_relative:./proto/relayer --go-grpc_out=paths=source_relative:./proto/relayer proto/relayer.proto
+	protoc -I=./proto --go_out=paths=source_relative:./proto/resolver --go-grpc_out=paths=source_relative:./proto/resolver proto/resolver.proto
 
 resolver:
 	go run ./resolver

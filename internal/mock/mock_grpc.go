@@ -13,7 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
-	proto "github.com/1inch/p2p-network/proto"
+	resolver "github.com/1inch/p2p-network/proto/resolver"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -56,10 +56,10 @@ func (mr *MockGRPCClientMockRecorder) Close() *gomock.Call {
 }
 
 // Execute mocks base method.
-func (m *MockGRPCClient) Execute(ctx context.Context, publicKey []byte, req *proto.ResolverRequest) (*proto.ResolverResponse, error) {
+func (m *MockGRPCClient) Execute(ctx context.Context, publicKey []byte, req *resolver.ResolverRequest) (*resolver.ResolverResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Execute", ctx, publicKey, req)
-	ret0, _ := ret[0].(*proto.ResolverResponse)
+	ret0, _ := ret[0].(*resolver.ResolverResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

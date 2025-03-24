@@ -10,7 +10,7 @@ import (
 	"sync"
 
 	"github.com/1inch/p2p-network/internal/registry"
-	pb "github.com/1inch/p2p-network/proto"
+	pb "github.com/1inch/p2p-network/proto/resolver"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protojson"

@@ -3,6 +3,8 @@ package testnetwork
 
 import (
 	"context"
+	"encoding/hex"
+	"log"
 	"log/slog"
 	"net"
 	"os"
@@ -66,6 +68,7 @@ type TestNetwork struct {
 	t                   *testing.T
 	cancelFns           context.CancelFunc
 	wg                  sync.WaitGroup
+	contractAdress      string
 	RelayerCount        int
 	ResolverCount       int
 	ResolverNodes       []*resolver.Resolver
@@ -117,12 +120,13 @@ func New(ctx context.Context, t *testing.T, relayerCount, resolverCount int, opt
 		cfg.DiscoveryConfig.WithNodeRegistry = tnCfg.WithNodeRegistry
 	}
 
-	_, _, err := registry.DeployNodeRegistry(context.Background(), &registry.Config{
-		DialURI:         cfg.DiscoveryConfig.RpcUrl,
-		PrivateKey:      cfg.PrivateKey,
-		ContractAddress: cfg.DiscoveryConfig.ContractAddress,
+	contractAddress, _, err := registry.DeployNodeRegistry(context.Background(), &registry.Config{
+		DialURI:    cfg.DiscoveryConfig.RpcUrl,
+		PrivateKey: cfg.PrivateKey,
 	})
 	assert.NoError(t, err, "Failed to create registry client")
+	testNetwork.contractAdress = contractAddress.String()
+	cfg.DiscoveryConfig.ContractAddress = testNetwork.contractAdress
 
 	var level = new(slog.LevelVar)
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
@@ -158,7 +162,7 @@ func New(ctx context.Context, t *testing.T, relayerCount, resolverCount int, opt
 		require.NoError(testNetwork.t, err)
 
 		testNetwork.GRPCPorts[i] = port
-		registerResolver(ctx, t, i, cfg, resolverNode.Addr())
+		testNetwork.registerResolver(ctx, t, i, cfg, resolverNode.Addr())
 
 		testNetwork.ResolverNodes[i] = resolverNode
 	}
@@ -276,7 +280,7 @@ func getResolverConfig() resolver.Config {
 	}
 }
 
-func registerResolver(ctx context.Context, t *testing.T, index int, cfg relayer.Config, ipAddress string) {
+func (tn *TestNetwork) registerResolver(ctx context.Context, t *testing.T, index int, cfg relayer.Config, ipAddress string) {
 	privateKey := resolverPrivateKeys[index]
 	privKey, err := crypto.HexToECDSA(privateKey)
 	require.NoError(t, err, "invalid private key")
@@ -285,9 +289,16 @@ func registerResolver(ctx context.Context, t *testing.T, index int, cfg relayer.
 	client, err := registry.Dial(ctx, &registry.Config{
 		DialURI:         cfg.DiscoveryConfig.RpcUrl,
 		PrivateKey:      privateKey,
-		ContractAddress: cfg.DiscoveryConfig.ContractAddress,
+		ContractAddress: tn.contractAdress,
 	})
 	require.NoError(t, err, "failed to connect to %s", cfg.DiscoveryConfig.RpcUrl)
 
-	_ = client.RegisterResolver(ctx, ipAddress, publicKey)
+	log.Default().Printf("start register resolver with ip= %s, publicKey= %s", ipAddress, hex.EncodeToString(publicKey))
+	err = client.RegisterResolver(ctx, ipAddress, publicKey)
+	require.NoError(t, err, "failed to register resolver with ip %s and public key= %s", ipAddress, hex.EncodeToString(publicKey))
+}
+
+// GetContractAddress returned contract address which will created for this test network
+func (tn *TestNetwork) GetContractAddress() string {
+	return tn.contractAdress
 }

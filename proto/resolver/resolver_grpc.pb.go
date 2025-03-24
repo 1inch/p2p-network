@@ -4,7 +4,7 @@
 // - protoc             v3.19.6
 // source: resolver.proto
 
-package __
+package resolver
 
 import (
 	context "context"
@@ -19,7 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Execute_Execute_FullMethodName = "/proto.Execute/Execute"
+	Execute_Execute_FullMethodName = "/resolver.Execute/Execute"
 )
 
 // ExecuteClient is the client API for Execute service.
@@ -108,7 +108,7 @@ func _Execute_Execute_Handler(srv interface{}, ctx context.Context, dec func(int
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Execute_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "proto.Execute",
+	ServiceName: "resolver.Execute",
 	HandlerType: (*ExecuteServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

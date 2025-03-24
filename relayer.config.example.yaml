@@ -1,5 +1,5 @@
 log_level: DEBUG
-http_endpoint: 127.0.0.1:8880
+http_endpoint: 127.0.0.1:8080
 private_key: 59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
 discovery:
   rpc_url: http://127.0.0.1:8545

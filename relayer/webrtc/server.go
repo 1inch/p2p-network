@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/1inch/p2p-network/proto"
-	"github.com/1inch/p2p-network/relayer/grpc"
+	pbrelayer "github.com/1inch/p2p-network/proto/relayer"
+	pbresolver "github.com/1inch/p2p-network/proto/resolver"
 	"github.com/pion/webrtc/v4"
 	"google.golang.org/protobuf/proto"
 )
@@ -38,7 +38,7 @@ type Option func(*Server)
 
 // GRPCClient defines the interface for a gRPC client.
 type GRPCClient interface {
-	Execute(ctx context.Context, publicKey []byte, req *pb.ResolverRequest) (*pb.ResolverResponse, error)
+	Execute(ctx context.Context, publicKey []byte, req *pbresolver.ResolverRequest) (*pbresolver.ResolverResponse, error)
 	Close() error
 }
 
@@ -293,17 +293,15 @@ func (w *Server) GetAllConnections() []string {
 
 func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
-		var message pb.IncomingMessage
+		var message pbrelayer.IncomingMessage
 		if err := proto.Unmarshal(msg.Data, &message); err != nil {
-			respMessage := &pb.OutgoingMessage{
-				Result: &pb.OutgoingMessage_Error{
-					Error: &pb.Error{
-						Code:    pb.ErrorCode_ERR_INVALID_MESSAGE_FORMAT,
-						Message: fmt.Sprintf("failed to unmarshal protobuf message: %v", err),
-					},
-				},
-			}
+			respMessage := w.buildOutgoingMessageWithErr(
+				[]byte{},
+				pbrelayer.ErrorCode_ERR_INVALID_MESSAGE_FORMAT,
+				fmt.Sprintf("failed to unmarshal protobuf message: %v", err))
+
 			w.logger.Error("failed to unmarshal protobuf message", slog.Any("err", err))
+
 			if sendErr := w.sendResponse(dc, respMessage); sendErr != nil {
 				w.logger.Error("failed to send invalid message error response", slog.Any("err", sendErr))
 			}
@@ -313,7 +311,7 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 		w.logger.Debug("received message", slog.Any("request", message.Request), slog.String("publicKeys", fmt.Sprintf("%x", message.PublicKeys)))
 
 		doneChan := make(chan bool)
-		respChan := make(chan *pb.OutgoingMessage)
+		respChan := make(chan *pbrelayer.OutgoingMessage)
 
 		for _, publicKey := range message.PublicKeys {
 			go w.retryGetResponseFromResolver(publicKey, message.Request, doneChan, respChan)
@@ -321,24 +319,12 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 
 		respMessage := <-respChan
 		if err := w.sendResponse(dc, respMessage); err != nil {
-			respMessage := &pb.OutgoingMessage{
-				Result: &pb.OutgoingMessage_Error{
-					Error: &pb.Error{
-						Code:    pb.ErrorCode_ERR_DATA_CHANNEL_SEND_FAILED,
-						Message: fmt.Sprintf("Failed to send response: %v", err),
-					},
-				},
-				PublicKey: respMessage.PublicKey,
-			}
 			w.logger.Error("failed to send response", slog.Any("err", err))
-			if sendErr := w.sendResponse(dc, respMessage); sendErr != nil {
-				w.logger.Error("failed to send data channel error response", slog.Any("err", sendErr))
-			}
 		}
 	})
 }
 
-func (w *Server) sendResponse(dc *webrtc.DataChannel, message *pb.OutgoingMessage) error {
+func (w *Server) sendResponse(dc *webrtc.DataChannel, message *pbrelayer.OutgoingMessage) error {
 	respBytes, err := proto.Marshal(message)
 	if err != nil {
 		return fmt.Errorf("failed to marshal protobuf response: %w", err)
@@ -391,19 +377,10 @@ func (w *Server) cleanup() {
 	}
 }
 
-func mapErrorToCodeAndMessage(err error) (pb.ErrorCode, string) {
-	if errors.Is(err, grpc.ErrResolverLookupFailed) {
-		return pb.ErrorCode_ERR_RESOLVER_LOOKUP_FAILED, fmt.Sprintf("resolver lookup failed: %s", err.Error())
-	} else if errors.Is(err, grpc.ErrGRPCExecutionFailed) {
-		return pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED, fmt.Sprintf("grpc execution failed: %s", err.Error())
-	}
-	return pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED, fmt.Sprintf("unexpected error: %s", err.Error())
-}
-
-func (w *Server) retryGetResponseFromResolver(publicKey []byte, request *pb.ResolverRequest, doneChan chan bool, respChan chan *pb.OutgoingMessage) {
+func (w *Server) retryGetResponseFromResolver(publicKey []byte, request *pbresolver.ResolverRequest, doneChan chan bool, respChan chan *pbrelayer.OutgoingMessage) {
 	w.logger.Debug("start request to resolver", slog.Any("public_key", string(publicKey)))
 
-	resp := &pb.OutgoingMessage{}
+	resp := &pbrelayer.OutgoingMessage{}
 	retryRequest := uint8(1)
 	requestSleepInterval := time.Duration(0)
 
@@ -423,72 +400,40 @@ func (w *Server) retryGetResponseFromResolver(publicKey []byte, request *pb.Reso
 		default:
 			{
 				w.logger.Debug("try get response from resolver", slog.Any("attempt", attempt+1), slog.Any("publicKey", fmt.Sprintf("%x", publicKey)))
-				resp = w.tryGetResponseFromResolver(publicKey, request)
+				resolverResponse, err := w.grpcClient.Execute(context.Background(), publicKey, request)
 
-				// if response without error, there is break cycle for attempts and put the message in chan
-				if resp.GetError() == nil {
-					w.logger.Info("success response from resolver")
-					w.logger.Debug("response from resolver without error, put it in channel", slog.Any("publicKey", fmt.Sprintf("%x", publicKey)))
-					break
-				}
+				// if grpc call return error, try retry
+				if err != nil {
+					// put OutgoingMessage with error
+					resp = &pbrelayer.OutgoingMessage{
+						PublicKey: publicKey,
+						Result: &pbrelayer.OutgoingMessage_Error{
+							Error: &pbrelayer.Error{
+								Code:    pbrelayer.ErrorCode_ERR_GRPC_EXECUTION_FAILED,
+								Message: fmt.Sprintf("failed call execute: %v", err),
+							},
+						},
+					}
 
-				// But if response with error, check which error that, start sleep and continue cycle for attempts
-				switch {
-				case w.isErrorForRetry(resp.GetError().Code):
-					{
-						w.logger.Debug("resolver returned supported error for retry")
-						w.logger.Debug("start sleep for interval", slog.Any("time_duration", requestSleepInterval))
-						time.Sleep(requestSleepInterval)
-					}
-				// there is no point retry get some response from resolvers, because nothing will change
-				// for example, error when dapps send request with not supported method in api handler
-				default:
-					{
-						w.logger.Error("unsupported error from resolver, retry is not possible", slog.Any("err", resp.GetError().Message))
-						break
-					}
+					w.logger.Debug("resolver returned supported error for retry")
+					w.logger.Debug("start sleep for interval", slog.Any("time_duration", requestSleepInterval))
+					time.Sleep(requestSleepInterval)
+					continue
 				}
+				// At this moment, if resolver return any error in ResolverResponse.Error that error not for retry
+				resp = &pbrelayer.OutgoingMessage{
+					PublicKey: publicKey,
+					Result: &pbrelayer.OutgoingMessage_Response{
+						Response: resolverResponse,
+					},
+				}
+				break
 			}
 		}
 	}
 	w.logger.Debug("put OutgoingMessage to response channel", slog.Any("publicKey", fmt.Sprintf("%x", publicKey)))
 	respChan <- resp
 	doneChan <- true
-}
-
-func (w *Server) isErrorForRetry(errorCode pb.ErrorCode) bool {
-	t := errorCode == pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED ||
-		errorCode == pb.ErrorCode_ERR_DATA_CHANNEL_SEND_FAILED
-
-	return t
-}
-
-func (w *Server) tryGetResponseFromResolver(publicKey []byte, request *pb.ResolverRequest) *pb.OutgoingMessage {
-	var respMessage *pb.OutgoingMessage
-	response, err := w.grpcClient.Execute(context.Background(), publicKey, request)
-	if err != nil {
-		var errorCode, errorMsg = mapErrorToCodeAndMessage(err)
-
-		respMessage = &pb.OutgoingMessage{
-			Result: &pb.OutgoingMessage_Error{
-				Error: &pb.Error{
-					Code:    errorCode,
-					Message: errorMsg,
-				},
-			},
-			PublicKey: publicKey,
-		}
-		w.logger.Error("failed to execute gRPC request", slog.Any("err", err))
-	} else {
-		respMessage = &pb.OutgoingMessage{
-			Result: &pb.OutgoingMessage_Response{
-				Response: response,
-			},
-			PublicKey: publicKey,
-		}
-	}
-
-	return respMessage
 }
 
 // create and configure new peer connection
@@ -541,4 +486,16 @@ func (w *Server) sendCandidate(candidateURL string, sessionID string, candidate 
 	}()
 
 	w.logger.Debug("candidate sent", slog.String("sessionID", sessionID), slog.Any("candidate", candidate), slog.String("status", resp.Status))
+}
+
+func (w *Server) buildOutgoingMessageWithErr(publickKey []byte, errCode pbrelayer.ErrorCode, errMsg string) *pbrelayer.OutgoingMessage {
+	return &pbrelayer.OutgoingMessage{
+		PublicKey: publickKey,
+		Result: &pbrelayer.OutgoingMessage_Error{
+			Error: &pbrelayer.Error{
+				Code:    errCode,
+				Message: errMsg,
+			},
+		},
+	}
 }

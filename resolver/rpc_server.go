@@ -10,16 +10,17 @@ import (
 	"os"
 
 	"github.com/1inch/p2p-network/internal/encryption"
-	pb "github.com/1inch/p2p-network/proto"
+	pb "github.com/1inch/p2p-network/proto/resolver"
 	"github.com/1inch/p2p-network/resolver/types"
 	ecies "github.com/ecies/go/v2"
 	ethCrypto "github.com/ethereum/go-ethereum/crypto"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 var (
-	errEmptyParam = errors.New("empty parameter")
+	errEmptyRequest   = errors.New("empty request")
+	errEmptyRequestId = errors.New("empty request id")
+	errEmptyPayload   = errors.New("empty payload")
+	errEmptyPublicKey = errors.New("empty public key")
 )
 
 // Server represents gRPC server.
@@ -77,60 +78,67 @@ func newServer(cfg *Config) (*Server, error) {
 // Execute executes ResolverRequest.
 func (s *Server) Execute(ctx context.Context, req *pb.ResolverRequest) (*pb.ResolverResponse, error) {
 	err := s.validateResolverRequest(req)
-	response := &pb.ResolverResponse{
-		Id:        req.Id,
-		Encrypted: req.Encrypted,
-	}
 
 	if err != nil {
-		return nil, s.formatGrpcError(response, err)
+		return s.buildResolverResponseWithErr(req, err), nil
 	}
 
 	jsonReq, err := s.getJsonRequest(req)
 	if err != nil {
-		return nil, s.formatGrpcError(response, err)
+		return s.buildResolverResponseWithErr(req, err), nil
 	}
 
 	resp, err := s.processRequest(jsonReq)
 
 	if err != nil {
-		return nil, s.formatGrpcError(response, err)
+		return s.buildResolverResponseWithErr(req, err), nil
 	}
 
 	if req.Encrypted {
 		pubKeyDecompressed, err := ethCrypto.DecompressPubkey(req.PublicKey)
 		if err != nil {
-			return nil, s.formatGrpcError(response, err)
+			return s.buildResolverResponseWithErr(req, err), nil
 		}
 		pubKeyBytes := ethCrypto.FromECDSAPub(pubKeyDecompressed)
 
 		pubKey, err := ecies.NewPublicKeyFromBytes(pubKeyBytes)
 		if err != nil {
-			return nil, s.formatGrpcError(response, err)
+			return s.buildResolverResponseWithErr(req, err), nil
 		}
 
 		resp, err = encryption.Encrypt(resp, pubKey)
 		if err != nil {
-			return nil, s.formatGrpcError(response, err)
+			return s.buildResolverResponseWithErr(req, err), nil
 		}
 	}
-	response.Payload = resp
-
-	return response, nil
+	return &pb.ResolverResponse{
+		Id:        req.Id,
+		Encrypted: req.Encrypted,
+		Result: &pb.ResolverResponse_Payload{
+			Payload: resp,
+		},
+	}, nil
 }
 
 func (s *Server) validateResolverRequest(req *pb.ResolverRequest) error {
 	// return after this check, because maybe nil pointer exception in next checks
+	// maybe this check is useless. let it stay for reinsuranceClick to apply
 	if req == nil {
-		return errEmptyParam
+		return errEmptyRequest
 	}
 
 	if req.Id == "" {
-		return errEmptyParam
+		return errEmptyRequestId
 	}
 
 	if len(req.Payload) == 0 {
-		return errEmptyParam
+		return errEmptyPayload
+	}
+
+	if req.Encrypted {
+		if len(req.PublicKey) == 0 {
+			return errEmptyPublicKey
+		}
 	}
 
 	return nil
@@ -156,6 +164,18 @@ func (s *Server) getJsonRequest(req *pb.ResolverRequest) (*types.JsonRequest, er
 	return &jsonReq, nil
 }
 
+func (s *Server) buildResolverResponseWithErr(req *pb.ResolverRequest, err error) *pb.ResolverResponse {
+	return &pb.ResolverResponse{
+		Id: req.Id,
+		Result: &pb.ResolverResponse_Error{
+			Error: &pb.Error{
+				Code:    s.getErrorCodeByErr(err),
+				Message: err.Error(),
+			},
+		},
+	}
+}
+
 func (s *Server) processRequest(jsonReq *types.JsonRequest) ([]byte, error) {
 	jsonResponses, err := s.handler.Process(jsonReq)
 	if err != nil {
@@ -172,31 +192,17 @@ func (s *Server) processRequest(jsonReq *types.JsonRequest) ([]byte, error) {
 	return byteArr, nil
 }
 
-// formatGrpcError function describe create grpc error and map to go error
-// pb.ResolverResponse needed for add it in details. In the response stored request id.
-func (s *Server) formatGrpcError(resp *pb.ResolverResponse, err error) error {
-	var code codes.Code
-	switch {
-	case s.itsKnownError(err):
-		{
-			code = codes.InvalidArgument
-		}
-	default:
-		{
-			code = codes.Internal
-		}
+func (s *Server) getErrorCodeByErr(err error) pb.ErrorCode {
+	if errors.Is(err, errEmptyRequest) ||
+		errors.Is(err, errEmptyRequestId) ||
+		errors.Is(err, errEmptyPayload) ||
+		errors.Is(err, errEmptyPublicKey) ||
+		errors.Is(err, errWrongParamCount) ||
+		errors.Is(err, errInvalidFormatAddress) ||
+		errors.Is(err, errUnrecognizedMethod) {
+
+		return pb.ErrorCode_ERR_INVALID_MESSAGE_FORMAT
 	}
 
-	errStatus, err := status.New(code, err.Error()).WithDetails(resp)
-	if err != nil {
-		return status.New(codes.Internal, "failed format err status").Err()
-	}
-	return errStatus.Err()
-}
-
-func (s *Server) itsKnownError(err error) bool {
-	return errors.Is(err, errEmptyBlock) ||
-		errors.Is(err, errEmptyAddress) ||
-		errors.Is(err, errUnrecognizedMethod) ||
-		errors.Is(err, errWrongParamCount)
+	return pb.ErrorCode_ERR_GRPC_EXECUTION_FAILED
 }

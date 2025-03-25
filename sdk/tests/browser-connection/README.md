@@ -19,19 +19,20 @@ This unit tests check creating connection between browser (dapp) and relayer. Th
 ```
     make register_nodes
 ```
-4. move to dir sdk
+4. move to directory with tests
 ```
-cd sdk
+cd sdk/tests/browser-connection
 ```
 5. install dependencies
 ```
-npm i
+npm install
 ```
-6. build page for test
+8. build test script
 ```
-npm run build
+bun install
+bun build src/call_client_script.ts --outdir ./build --sourcemap=external
 ```
-7. run tests
+9. run tests
 ```
-npm run test
+npm test
 ```

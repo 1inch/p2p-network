@@ -3,6 +3,7 @@ ignore:
   - .git/
   - /**/node_modules
   - /**/*_pb.ts
+  - /**/*.js.map
 
 rules:
   # checks if file ends in a newline character

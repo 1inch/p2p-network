@@ -100,6 +100,12 @@ jobs:
           node --version
           npm --version
 
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Verify Bun Installation
+        run: bun --version
+
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1.3.1
 
@@ -127,8 +133,13 @@ jobs:
 
       - name: Install dependenies
         run: |
-          cd sdk && npm i
-          cd tests/browser-connection && npm i
+          cd sdk/tests/browser-connection && npm i
+
+      - name: Build javascript files
+        run: |
+          cd sdk/tests/browser-connection
+          bun install
+          bun build src/call_client_script.ts --outdir ./build --sourcemap=external
 
       - name: Start relayer for SDK test
         run: |

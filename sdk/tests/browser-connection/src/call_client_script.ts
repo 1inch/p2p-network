@@ -59,18 +59,18 @@ function getValueFromForm(formId: string): string {
 }
 
 function setResponseToDoc(resp: JsonResponse) {
-  let inputRequestIdResult = createNewInputElement("input-request-id-result", resp.id)
-  let inputResult = createNewInputElement("input-result", resp.result)
-  document.getElementById("td-for-request-id-result")?.appendChild(inputRequestIdResult)
-  document.getElementById("td-for-result")?.appendChild(inputResult)
+  setRequestIdAndResultToInputs(resp.id, resp.result);
+}
+
+function setRequestIdAndResultToInputs(requestId: string, result: string) {
+  let inputRequestIdResult = createNewInputElement("input-request-id-result", requestId);
+  let inputResult = createNewInputElement("input-result", result);
+  document.getElementById("td-for-request-id-result")?.appendChild(inputRequestIdResult);
+  document.getElementById("td-for-result")?.appendChild(inputResult);
 }
 
 function setErrorToDoc(err: Error) {
-  let inputRequestIdResult = createNewInputElement("input-request-id-result", "nil")
-  let inputResult = createNewInputElement("input-result", err.message)
-  document.getElementById("td-for-result")?.appendChild(inputResult)
-  document.getElementById("td-for-request-id-result")?.appendChild(inputRequestIdResult)
-
+  setRequestIdAndResultToInputs("nil", err.message);
 }
 
 function createNewInputElement(id: string, value: string) {

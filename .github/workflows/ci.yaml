@@ -138,7 +138,6 @@ jobs:
       - name: Build javascript files
         run: |
           cd sdk/tests/browser-connection
-          bun install
           bun build src/call_client_script.ts --outdir ./build --sourcemap=external
 
       - name: Start relayer for SDK test

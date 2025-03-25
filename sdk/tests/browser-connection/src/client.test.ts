@@ -65,9 +65,8 @@ describe("SDK integration tests",  ()=> {
         ['latest']
       ),
       function(request: Request, actualResponse: Response) {
-        expect(actualResponse.requestId).toEqual(request.requestId)
         console.log(actualResponse.result)
-
+        expect(actualResponse.result).toContain("unrecognized method")
       }
     ),
     new TestCase(
@@ -78,9 +77,8 @@ describe("SDK integration tests",  ()=> {
         ['latest']
       ),
       function(request: Request, actualResponse: Response) {
-        expect(actualResponse.requestId).toEqual(request.requestId)
         console.log(actualResponse.result)
-
+        expect(actualResponse.result).toContain("wrong number of params")
       }
     ),
     new TestCase(
@@ -91,9 +89,8 @@ describe("SDK integration tests",  ()=> {
         ['incorrect-address', 'latest']
       ),
       function(request: Request, actualResponse: Response) {
-        expect(actualResponse.requestId).toEqual(request.requestId)
         console.log(actualResponse.result)
-
+        expect(actualResponse.result).toContain("invalid format for address")
       }
     )
   ]

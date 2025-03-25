@@ -15,6 +15,7 @@ defaultLogger.info("script loaded");
 // In test you can check expected and actual result without hardcode
 // I left default volumes in input tags.
 async function callExecute() {
+  deleteResponseInputs();
   
   let client = new Client(defaultLogger);
   await client.init({
@@ -65,8 +66,11 @@ function setResponseToDoc(resp: JsonResponse) {
 }
 
 function setErrorToDoc(err: Error) {
+  let inputRequestIdResult = createNewInputElement("input-request-id-result", "nil")
   let inputResult = createNewInputElement("input-result", err.message)
   document.getElementById("td-for-result")?.appendChild(inputResult)
+  document.getElementById("td-for-request-id-result")?.appendChild(inputRequestIdResult)
+
 }
 
 function createNewInputElement(id: string, value: string) {
@@ -77,4 +81,20 @@ function createNewInputElement(id: string, value: string) {
   newInputElement.value = value
 
   return newInputElement
+}
+
+function deleteResponseInputs() {
+  let inputForResult = document.getElementById("input-result");
+
+  if (inputForResult) {
+    console.log("remove input for result");
+    inputForResult.remove();
+  }
+
+  let inputForRequestId = document.getElementById("input-request-id-result");
+
+  if (inputForRequestId) {
+    console.log("remove input for request id");
+    inputForRequestId.remove();
+  }
 }

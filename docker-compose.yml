@@ -50,7 +50,7 @@ services:
       dockerfile: ./resolver/Dockerfile
     volumes:
       - "./assets/resolver.config.yaml:/app/config.yaml"
-    entrypoint: ["/bin/sh", "-c", "./main register --config_file config.yaml; ./main run --configFile config.yaml"]
+    entrypoint: ["/bin/sh", "-c", "./main register --config_file config.yaml; ./main run --config_file config.yaml"]
     depends_on:
       deploy-contract:
         condition: service_completed_successfully

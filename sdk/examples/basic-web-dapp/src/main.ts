@@ -120,19 +120,20 @@ function shouldEncryptRequest(): boolean {
 }
 
 async function getBalance(client: Client): Promise<void> {
+  const chainId = (document.getElementById("chainIdInput") as HTMLInputElement).value;
   const address = (document.getElementById("addressInput") as HTMLInputElement).value;
   const balanceField = document.getElementById("balanceField") as HTMLInputElement;
   const req: JsonRequest = {
     Id: "TestID-GetBalance",
     Method: "GetWalletBalance",
-    Params: [address, "latest"]
+    Params: [chainId, address]
   };
   try {
     mainLogger.info("Sending GetBalance request...");
     const resp: JsonResponse = await client.execute(req, shouldEncryptRequest());
     mainLogger.info("GetBalance response received:", JSON.stringify(resp));
     if (resp && (resp as any).result) {
-      balanceField.value = (resp as any).result.toString();
+      balanceField.value = JSON.stringify((resp as any).result);
     } else {
       balanceField.value = "No balance returned";
     }

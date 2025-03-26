@@ -3,6 +3,7 @@ module github.com/1inch/p2p-network
 go 1.23.4
 
 require (
+	github.com/1inch/1inch-sdk-go v1.0.0-beta.3
 	github.com/ecies/go/v2 v2.0.10
 	github.com/ethereum/go-ethereum v1.14.12
 	github.com/pion/webrtc/v4 v4.0.6
@@ -36,6 +37,7 @@ require (
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
+	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/holiman/uint256 v1.3.1 // indirect

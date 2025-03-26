@@ -234,9 +234,10 @@ bin/relayer run --config ./relayer.config.example.yaml
 ```
 
 ### Run resolver node
+For run resolver need replace 'put-key-here' to 1inch dev portal token. 
 ```
 make build_resolver_local
-bin/resolver run --api=infura --infuraKey=a8401733346d412389d762b5a63b0bcf --privateKey=5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a  --grpc_endpoint=127.0.0.1:8001
+bin/resolver run --api=1inch --1inch_key=put-key-here --privateKey=5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a  --grpc_endpoint=127.0.0.1:8001
 ```
 
 ---

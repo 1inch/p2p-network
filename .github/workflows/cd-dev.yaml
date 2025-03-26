@@ -104,16 +104,21 @@ jobs:
           echo "${{ secrets.VAULT_PASSWORD }}" > /tmp/vault_pass
           ansible-vault decrypt assets/*.yaml --vault-password-file=/tmp/vault_pass
   
+      - name: Set permissions for config files
+        run: chmod -R 644 assets/*.yaml
+    
       - name: Deploy Configs
         uses: appleboy/scp-action@master
         with:
-          host: ${{ secrets.SSH_HOST_DEV }}
-          username: ${{ secrets.SSH_USER_DEV }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
-          source: "assets/*.yaml"
-          target: ${{ secrets.PROJECT_CONFIG_PATH_DEV }}
-          strip_components: 1
+            host: ${{ secrets.SSH_HOST_DEV }}
+            username: ${{ secrets.SSH_USER_DEV }}
+            key: ${{ secrets.SSH_PRIVATE_KEY }}
+            port: 22
+            source: "assets/*.yaml"
+            target: ${{ secrets.PROJECT_CONFIG_PATH_DEV }}
+            strip_components: 1
+            debug: true
+  
           
       - name: Cleanup Vault Password File
         if: always()

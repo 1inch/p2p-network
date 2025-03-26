@@ -4,6 +4,7 @@ import (
 	"log/slog"
 
 	"github.com/1inch/p2p-network/resolver/types"
+	"github.com/ethereum/go-ethereum/common"
 	gethrpc "github.com/ethereum/go-ethereum/rpc"
 )
 
@@ -63,6 +64,10 @@ func (h *infuraApiHandler) getWalletBalance(params []string) (string, error) {
 func (h *infuraApiHandler) validateRequest(address, block string) error {
 	if address == "" {
 		return errEmptyAddress
+	}
+
+	if !common.IsHexAddress(address) {
+		return errInvalidFormatAddress
 	}
 
 	if block == "" {

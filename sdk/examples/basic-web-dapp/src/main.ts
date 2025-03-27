@@ -101,7 +101,9 @@ async function initializeClient(): Promise<Client> {
   try {
     await client.init({
       providerUrl: providerUrl,
-      contractAddr: contractAddr
+      contractAddr: contractAddr,
+      sessionId: "basic-web3-app",
+      signalingServer: 'http://0.0.0.0:5173/api'
     });
     updateConnectionState("Connected");
     mainLogger.info("WebRTC initialized");

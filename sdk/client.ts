@@ -112,11 +112,11 @@ export class Client {
           try {
             await this.pc?.addIceCandidate(new RTCIceCandidate(candidateData));
           } catch (e) {
-            console.error("Failed to add ICE Candidate:", e);
+            this.logger.error("Failed to add ICE Candidate:", e);
           }
         }
       } catch (err) {
-        console.error("Error fetching remote candidates:", err);
+        this.logger.error("Error fetching remote candidates:", err);
       }
     }, 500);
   }

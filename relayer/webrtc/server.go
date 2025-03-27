@@ -481,8 +481,9 @@ func (w *Server) sendCandidate(candidateURL string, sessionID string, candidate 
 		return
 	}
 	defer func() {
-		err := resp.Body.Close
-		w.logger.Error("failed to close response body", slog.String("sessionID", sessionID), slog.Any("err", err))
+		if err := resp.Body.Close(); err != nil {
+			w.logger.Error("failed to close response body", slog.String("sessionID", sessionID), slog.Any("err", err))
+		}
 	}()
 
 	w.logger.Debug("candidate sent", slog.String("sessionID", sessionID), slog.Any("candidate", candidate), slog.String("status", resp.Status))

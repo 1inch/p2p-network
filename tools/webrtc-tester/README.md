@@ -21,6 +21,6 @@ npx http-server .
 {
   "id": "1",
   "method": "GetWalletBalance",
-  "params": ["0x1234", "latest"]
+  "params": ["1", "0x4838B106FCe9647Bdf1E7877BF73cE8B0BAD5f97"]
 }
 ```

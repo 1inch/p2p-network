@@ -31,7 +31,6 @@ func main() {
 				Name:  "run",
 				Usage: "Runs resolver node",
 				Flags: []cli.Flag{
-					// TODO need unify format for flag names
 					&cli.StringFlag{
 						Name:  "grpc_endpoint",
 						Usage: "gRPC server endpoint",
@@ -48,20 +47,26 @@ func main() {
 						Usage: "Secp256k1 private key in hex",
 					},
 					&cli.StringFlag{
-						Name:   "infuraKey",
+						Name:   "infura_key",
 						Value:  "",
 						Usage:  "Infura API Key",
 						EnvVar: "INFURA_KEY",
 					},
 					&cli.StringFlag{
-						Name:  "configFile",
+						Name:   "1inch_key",
+						Value:  "",
+						Usage:  "1Inch API key",
+						EnvVar: "1INCH_KEY",
+					},
+					&cli.StringFlag{
+						Name:  "config_file",
 						Usage: "Path to the configuration file",
 					},
 				},
 				Action: func(c *cli.Context) error {
 					cfg := resolver.Config{}
 					// Try to load config file, if present
-					loadedCfg := loadConfigByPath(c.String("configFile"))
+					loadedCfg := loadConfigByPath(c.String("config_file"))
 					if loadedCfg != nil {
 						cfg = *loadedCfg
 					}
@@ -77,18 +82,24 @@ func main() {
 						cfg.PrivateKey = privateKey
 					}
 					// Override config file value for apis
-					api := c.String("api")
-					if len(api) > 0 {
-						var apiConfigs resolver.ApiConfigs
-						switch api {
-						case "default":
-							apiConfigs.Default.Enabled = true
-						case "infura":
-							apiConfigs.Infura.Enabled = true
-							apiConfigs.Infura.Key = c.String("infuraKey")
+					if !isApiHandlerSet(&cfg) {
+						api := c.String("api")
+						if len(api) > 0 {
+							var apiConfigs resolver.ApiConfigs
+							switch api {
+							case "default":
+								apiConfigs.Default.Enabled = true
+							case "infura":
+								apiConfigs.Infura.Enabled = true
+								apiConfigs.Infura.Key = c.String("infura_key")
+							case "1inch":
+								apiConfigs.OneInch.Enabled = true
+								apiConfigs.OneInch.Key = c.String("1inch_key")
+							}
+							cfg.Apis = apiConfigs
 						}
-						cfg.Apis = apiConfigs
 					}
+
 					resolverNode, err := resolver.New(cfg, logger)
 					if err != nil {
 						logger.Error("Error create resolver node", slog.Any("err", err))
@@ -221,4 +232,8 @@ func setupLogger(cfg resolver.Config) *slog.Logger {
 		Level: leveler,
 	})
 	return slog.New(handler)
+}
+
+func isApiHandlerSet(cfg *resolver.Config) bool {
+	return cfg.Apis.Default.Enabled || cfg.Apis.Infura.Enabled || cfg.Apis.OneInch.Enabled
 }

@@ -44,11 +44,18 @@ func newServer(cfg *Config) (*Server, error) {
 	switch {
 	case cfg.Apis.Default.Enabled:
 		{
+			logger.Debug("set default api handler")
 			handler = NewDefaultApiHandler(cfg.Apis.Default, logger)
 		}
 	case cfg.Apis.Infura.Enabled:
 		{
+			logger.Debug("set infura api handler")
 			handler = NewInfuraApiHandler(cfg.Apis.Infura, logger)
+		}
+	case cfg.Apis.OneInch.Enabled:
+		{
+			logger.Debug("set 1inch api handler")
+			handler = NewOneInchApiHandler(cfg.Apis.OneInch, logger)
 		}
 	default:
 		logger.Error("expect someone handler api in config")

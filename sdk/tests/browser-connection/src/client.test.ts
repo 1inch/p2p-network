@@ -46,18 +46,6 @@ describe("SDK integration tests",  ()=> {
   // initialize test cases
   const testCases = [
     new TestCase(
-      'send GetWalletBalance request to relayer',
-      new Request(
-        'positive-test-request-id', 
-        'GetWalletBalance', 
-        ['0x38308C349fd2F9dad31Aa3bFe28015dA3EB67193', 'latest']
-      ),
-      function(request: Request, actualResponse: Response) {
-        expect(actualResponse.requestId).toEqual(request.requestId)
-        expect(actualResponse.result).not.toBeUndefined()
-      }
-    ),
-    new TestCase(
       'send request with unknown method name for api handler',
       new Request(
         'unknown-method-request-id',
@@ -92,7 +80,19 @@ describe("SDK integration tests",  ()=> {
         console.log(actualResponse.result)
         expect(actualResponse.result).toContain("invalid format for address")
       }
-    )
+    ),
+    new TestCase(
+      'send GetWalletBalance request to relayer',
+      new Request(
+        'positive-test-request-id', 
+        'GetWalletBalance', 
+        ['0x38308C349fd2F9dad31Aa3bFe28015dA3EB67193', 'latest']
+      ),
+      function(request: Request, actualResponse: Response) {
+        expect(actualResponse.requestId).toEqual(request.requestId)
+        expect(actualResponse.result).not.toBeUndefined()
+      }
+    ),
   ]
 
   // start browser before all tests

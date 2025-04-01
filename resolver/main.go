@@ -58,6 +58,7 @@ func New(cfg Config, logger *slog.Logger) (*Resolver, error) {
 		meterServerOption := opentelemetry.ServerOption(opentelemetry.Options{
 			MetricsOptions: opentelemetry.MetricsOptions{
 				MeterProvider: meterProvider,
+				Metrics:       opentelemetry.DefaultMetrics(),
 			},
 		})
 		serverOptions = append(serverOptions, meterServerOption)

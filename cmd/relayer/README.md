@@ -46,7 +46,6 @@ webrtc:
 - **`webrtc.port.min`**: The minimum from range
 - **`webrtc.port.max`**: The maximum from range
 
-
 ## Command-Line Interface
 
 The Relayer Node is managed via a CLI. Below is the structure of the CLI:
@@ -56,6 +55,19 @@ The Relayer Node is managed via a CLI. Below is the structure of the CLI:
 - **`run`**: Starts the Relayer Node.
   - **Flags**:
     - `--config`: Path to the YAML configuration file (required).
+
+## Error codes
+
+```
+// Enum to represent standardized error codes.
+enum ErrorCode {
+  ERR_INVALID_MESSAGE_FORMAT = 0;    // Error in message format.
+  ERR_RESOLVER_LOOKUP_FAILED = 1;    // Failed to resolve address for public key.
+  ERR_GRPC_EXECUTION_FAILED = 2;     // gRPC execution failure.
+  ERR_RESPONSE_SERIALIZATION_FAILED = 3; // Failed to serialize the response.
+  ERR_DATA_CHANNEL_SEND_FAILED = 4;  // Failed to send the response via the data channel.
+}
+```
 
 ### Example Usage
 

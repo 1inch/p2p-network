@@ -1,3 +1,5 @@
+bursavich.dev/grpcprom v0.2.3 h1:Bw8BGaYmymzQ6mK3keAHf/imJ9uqMI6hPnYKIVvCjjs=
+bursavich.dev/grpcprom v0.2.3/go.mod h1:RWLMU6kRck12PqUVRVu6J2BO/t5sgzQUrOM78pPZBwE=
 cel.dev/expr v0.16.2 h1:RwRhoH17VhAu9U5CMvMhH1PDVgf0tuz9FT+24AfMLfU=
 cel.dev/expr v0.16.2/go.mod h1:gXngZQMkWJoSbE8mOzehJlXQyubn/Vg0vR9/F3W7iw8=
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=

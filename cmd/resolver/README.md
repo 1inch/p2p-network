@@ -40,34 +40,35 @@ By default resolver listens on port 8001, this can be overridden via `--port` pa
 ```
 bin/resolver run --port=8888
 ```
-Additionally, one can provide a YAML file with the resolver configuration, and pass its path as the `--configFile` parameter:
+Additionally, one can provide a YAML file with the resolver configuration, and pass its path as the `--config_file` parameter:
 ```
-bin/resolver run --configFile resolver_config.yaml
+bin/resolver run --config_file resolver_config.yaml
 ```
 
 ## grpcurl
 Now one can test gRPC server responses via `grpcurl`:
 
 1. Failed request (empty JSON)
-`grpcurl -plaintext localhost:8001 proto.Execute/Execute` should return:
+`grpcurl -plaintext localhost:8001 resolver.Execute/Execute` should return:
 ```
 {
-  "status": "RESOLVER_ERROR"
+  "error": {
+    "message": "empty request id"
+  }
 }
 ```
 2. Successful request (GetWalletBalance payload):
 ```
 PAYLOAD=$(jq '. | @base64' <<< '{"id": "new", "method": "GetWalletBalance", "params": ["0x1234", "latest"]}')
 
-grpcurl -plaintext -d "{\"id\": \"1\", \"payload\": $PAYLOAD}" localhost:8001 proto.Execute/Execute | jq '.payload | @base64d | fromjson'
+grpcurl -plaintext -d "{\"id\": \"1\", \"payload\": $PAYLOAD}" localhost:8001 resolver.Execute/Execute | jq '.payload | @base64d | fromjson'
 
 ```
 Output:
 ```
 {
   "id": "new",
-  "result": 0,
-  "error": null
+  "result": 555
 }
 ```
 **Note**: we first base64-encode the payload to be sent to gRPC. In the above example `jq` is used for base64 encoding.
@@ -91,7 +92,7 @@ Resolver have standardized health check endpoints:
 Both api have same empty request body. You can also try this endpoints in postman using server reflection.
 
 
-## Metrics
+# Metrics
 Resolver can return metrics for telemetry, you can go to http endpoint **/metrics** and get metrics.
 This option is customizable. You can turn on/off by config.yaml.
 For enable the endpoint add in config:
@@ -106,3 +107,14 @@ metric:
   enabled: false
   port: 8081
 ```
+## Parameters
+If some parameter doesn`t display on endpoint, you should make a request to resolver and this parameter will be calculated.
+
+- ***grpc_server_connections_open*** [gauge] Number of gRPC server connections open.
+- ***grpc_server_connections_total*** [counter] Total number of gRPC server connections opened.
+- ***grpc_server_requests_pending{service,method}*** [gauge] Number of gRPC server requests pending.
+- ***grpc_server_requests_total{service,method,code}*** [counter] Total number of gRPC server requests completed.
+- ***grpc_server_latency_seconds{service,method,code}*** [histogram] Latency of gRPC server requests.
+- ***grpc_server_recv_bytes{service,method,frame}*** [histogram] Bytes received in gRPC server requests.
+- ***grpc_server_sent_bytes{service,method,frame}***
+ [histogram] Bytes sent in gRPC server responses.

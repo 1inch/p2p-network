@@ -14,6 +14,7 @@ import (
 
 	pbrelayer "github.com/1inch/p2p-network/proto/relayer"
 	pbresolver "github.com/1inch/p2p-network/proto/resolver"
+	"github.com/1inch/p2p-network/relayer/metrics"
 	"github.com/pion/webrtc/v4"
 	"google.golang.org/protobuf/proto"
 )
@@ -130,11 +131,13 @@ func WithTrickleICE() Option {
 
 // HandleSDP processes an SDP offer, sets up a PeerConnection, and generates an SDP answer.
 func (w *Server) HandleSDP(candidateURL, sessionID string, offer webrtc.SessionDescription) (*webrtc.SessionDescription, error) {
+	start := time.Now()
+
 	w.logger.Debug("handle sdp", slog.String("sesionID", sessionID))
 
 	pc, err := w.newPeerConnection()
-
 	if err != nil {
+		metrics.SdpNegotiationTotal.WithLabelValues("failure").Inc()
 		return nil, fmt.Errorf("failed to create peer connection: %w", err)
 	}
 
@@ -146,6 +149,7 @@ func (w *Server) HandleSDP(candidateURL, sessionID string, offer webrtc.SessionD
 			delete(w.connections, sessionID)
 			delete(w.dataChannels, sessionID)
 			w.mu.Unlock()
+			metrics.ActivePeerConnections.Dec()
 		}
 	})
 
@@ -175,23 +179,26 @@ func (w *Server) HandleSDP(candidateURL, sessionID string, offer webrtc.SessionD
 			w.logger.Debug("data channel opened", slog.String("sessionID", sessionID), slog.String("lable", dc.Label()))
 		})
 
-		w.handleDataChannel(dc)
+		w.handleDataChannel(dc, sessionID)
 	})
 
 	// Set remote SDP description (offer).
 	if err := pc.SetRemoteDescription(offer); err != nil {
+		metrics.SdpNegotiationTotal.WithLabelValues("failure").Inc()
 		return nil, fmt.Errorf("failed to set remote description: %w", err)
 	}
 
 	// Generate and set local SDP description (answer).
 	answer, err := pc.CreateAnswer(nil)
 	if err != nil {
+		metrics.SdpNegotiationTotal.WithLabelValues("failure").Inc()
 		return nil, fmt.Errorf("failed to create answer: %w", err)
 	}
 
 	gatherComplete := webrtc.GatheringCompletePromise(pc)
 
 	if err := pc.SetLocalDescription(answer); err != nil {
+		metrics.SdpNegotiationTotal.WithLabelValues("failure").Inc()
 		return nil, fmt.Errorf("failed to set local description: %w", err)
 	}
 
@@ -200,9 +207,14 @@ func (w *Server) HandleSDP(candidateURL, sessionID string, offer webrtc.SessionD
 	w.connections[sessionID] = pc
 	w.mu.Unlock()
 
+	metrics.ActivePeerConnections.Inc()
+
 	if !w.useTrickleICE {
 		<-gatherComplete
 	}
+
+	metrics.SdpNegotiationTotal.WithLabelValues("success").Inc()
+	metrics.SdpNegotiationDuration.Observe(time.Since(start).Seconds())
 
 	return pc.LocalDescription(), nil
 }
@@ -291,8 +303,11 @@ func (w *Server) GetAllConnections() []string {
 	return sessions
 }
 
-func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
+func (w *Server) handleDataChannel(dc *webrtc.DataChannel, sessionID string) {
 	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
+		start := time.Now()
+		metrics.DataChannelMessagesReceived.WithLabelValues(sessionID).Inc()
+
 		var message pbrelayer.IncomingMessage
 		if err := proto.Unmarshal(msg.Data, &message); err != nil {
 			respMessage := w.buildOutgoingMessageWithErr(
@@ -305,6 +320,8 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 			if sendErr := w.sendResponse(dc, respMessage); sendErr != nil {
 				w.logger.Error("failed to send invalid message error response", slog.Any("err", sendErr))
 			}
+			metrics.DataChannelMessagesSent.WithLabelValues(sessionID, "failed").Inc()
+
 			return
 		}
 
@@ -321,6 +338,15 @@ func (w *Server) handleDataChannel(dc *webrtc.DataChannel) {
 		if err := w.sendResponse(dc, respMessage); err != nil {
 			w.logger.Error("failed to send response", slog.Any("err", err))
 		}
+		status := "success"
+		if respMessage.GetError() != nil {
+			status = "failed"
+			w.logger.Error("failed to send response", slog.Any("err", respMessage.GetError().Message))
+		}
+		metrics.DataChannelMessagesSent.WithLabelValues(sessionID, status).Inc()
+
+		latency := time.Since(start).Seconds()
+		metrics.DataChannelLatency.WithLabelValues(sessionID).Observe(latency)
 	})
 }
 
@@ -456,6 +482,7 @@ func (w *Server) newPeerConnection() (*webrtc.PeerConnection, error) {
 }
 
 func (w *Server) sendCandidate(candidateURL string, sessionID string, candidate webrtc.ICECandidate) {
+	start := time.Now()
 	payload := ICECandidate{
 		SessionID: sessionID,
 		Candidate: candidate,
@@ -485,6 +512,10 @@ func (w *Server) sendCandidate(candidateURL string, sessionID string, candidate 
 			w.logger.Error("failed to close response body", slog.String("sessionID", sessionID), slog.Any("err", err))
 		}
 	}()
+
+	duration := time.Since(start).Seconds()
+	metrics.IceCandidateSendDuration.WithLabelValues(sessionID).Observe(duration)
+	metrics.IceCandidateSentTotal.WithLabelValues(sessionID, resp.Status).Inc()
 
 	w.logger.Debug("candidate sent", slog.String("sessionID", sessionID), slog.Any("candidate", candidate), slog.String("status", resp.Status))
 }

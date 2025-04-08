@@ -4,6 +4,7 @@ services:
   blockchain:
     container_name: blockchain
     image: ghcr.io/foundry-rs/foundry:v0.3.0
+    # platform: linux/amd64
     entrypoint: "anvil --host 0.0.0.0"
     ports:
       - "8545:8545"
@@ -57,6 +58,33 @@ services:
     ports:
       - "8001:8001"
       - "8081:8081"
+    networks:
+      - fullstack
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+    networks:
+      - fullstack
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      # Default Grafana admin password; change as needed.
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+    restart: unless-stopped
     networks:
       - fullstack
 

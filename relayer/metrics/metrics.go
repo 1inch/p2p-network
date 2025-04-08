@@ -1,4 +1,4 @@
-// metrics.go
+// Package metrics provides Prometheus metrics for the relayer
 package metrics
 
 import (
@@ -144,7 +144,7 @@ func init() {
 	)
 }
 
-// MetricsHandler returns a handler for Prometheus metrics
-func MetricsHandler() http.Handler {
+// Handler returns a handler for Prometheus metrics
+func Handler() http.Handler {
 	return promhttp.Handler()
 }

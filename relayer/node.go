@@ -86,7 +86,7 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 		mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 			logger.Debug("called /health endpoint")
 		})
-		mux.Handle("/metrics", metrics.MetricsHandler())
+		mux.Handle("/metrics", metrics.Handler())
 
 		httpServer = httpapi.New(logger.WithGroup("httpapi"), httpListener, handlerWithLoggingAndCors(logger, mux))
 	}

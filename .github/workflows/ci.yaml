@@ -78,6 +78,7 @@ jobs:
           skip-save-cache: false
           problem-matchers: false
           cache-invalidation-interval: 7
+          args: --timeout=5m
   
       - name: Check compilation
         run: |

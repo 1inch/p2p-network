@@ -42,6 +42,7 @@ services:
       - "15000-15500:15000-15500"
     networks:
       - fullstack
+      - test
 
   resolver:
     container_name: resolver
@@ -79,6 +80,8 @@ services:
     container_name: grafana
     ports:
       - "3000:3000"
+    volumes:
+      - ./assets/provisioning:/etc/grafana/provisioning
     environment:
       # Default Grafana admin password; change as needed.
       - GF_SECURITY_ADMIN_PASSWORD=admin
@@ -91,3 +94,5 @@ services:
 networks:
   fullstack:
     driver: bridge
+  test:
+    driver: ipvlan

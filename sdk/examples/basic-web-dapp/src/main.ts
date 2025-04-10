@@ -164,10 +164,6 @@ async function sendFunds(client: Client): Promise<void> {
   }
 }
 
-function methodNotImplemented(methodName: string): void {
-  showError("Method '" + methodName + "' is not implemented.");
-}
-
 window.onload = async () => {
   let client: Client;
   try {

@@ -11,15 +11,33 @@ import (
 	"github.com/1inch/p2p-network/resolver/types"
 )
 
-const apiUrl = "https://api.1inch.dev"
+const (
+	apiUrl          = "https://api.1inch.dev"
+	chainIdArbitrum = "42161"
+	chainIdAurora   = "1313161554"
+	chainIdAvalance = "43114"
+	chainIdBase     = "8453"
+	chainIdBinance  = "56"
+	chainIdZkSync   = "324"
+	chainIdEthereum = "1"
+	chainIdFantom   = "250"
+	chainIdGnosis   = "100"
+	chainIdKaia     = "8217"
+	chainOptimism   = "10"
+	chainIdPolygon  = "137"
+	chainIdLinea    = "59144"
+)
 
-var errChainIdMustBeNumeric = errors.New("chainid must be numeric")
+var (
+	errChainIdMustBeNumeric = errors.New("chainId must be numeric")
+	errChainIdNotSupported  = errors.New("chainId not supported")
+)
 
 // oneInchApiHandler represends handler which would call 1inch api
 type oneInchApiHandler struct {
 	cfg            OneInchApiConfig
 	logger         *slog.Logger
-	balanceClients map[string]*balances.Client // map<chainId, balances.Client>
+	balanceClients map[uint64]*balances.Client // map<chainId, balances.Client>
 }
 
 // NewOneInchApiHandler creates an 1inch API handler instance
@@ -27,38 +45,32 @@ func NewOneInchApiHandler(cfg OneInchApiConfig, logger *slog.Logger) ApiHandler 
 	return &oneInchApiHandler{
 		cfg:            cfg,
 		logger:         logger.WithGroup("1inch-handler-api"),
-		balanceClients: make(map[string]*balances.Client),
+		balanceClients: make(map[uint64]*balances.Client),
 	}
 }
 
-func (h *oneInchApiHandler) getClientByChainId(chainId string) (*balances.Client, error) {
+func (h *oneInchApiHandler) getClientByChainId(chainId uint64) (*balances.Client, error) {
 	if client, ok := h.balanceClients[chainId]; ok {
 		return client, nil
 	}
 
-	chainIdInt, err := strconv.ParseUint(chainId, 10, 64)
-	if err != nil {
-		h.logger.Error("Invalid chainId format", slog.Any("chainId", chainId))
-		return nil, errChainIdMustBeNumeric
-	}
-
 	config, err := balances.NewConfiguration(
 		balances.ConfigurationParams{
-			ChainId: chainIdInt,
+			ChainId: chainId,
 			ApiUrl:  apiUrl,
 			ApiKey:  h.cfg.Key,
 		},
 	)
 
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("Failed create configuration for client of balances for chainId: %s", chainId), slog.Any("err", err.Error()))
+		h.logger.Error(fmt.Sprintf("Failed create configuration for client of balances for chainId: %d", chainId), slog.Any("err", err.Error()))
 		return nil, err
 	}
 
 	newClient, err := balances.NewClient(config)
 
 	if err != nil {
-		h.logger.Error(fmt.Sprintf("Failed create client of balances for chainId: %s", chainId), slog.Any("err", err.Error()))
+		h.logger.Error(fmt.Sprintf("Failed create client of balances for chainId: %d", chainId), slog.Any("err", err.Error()))
 		return nil, err
 	}
 
@@ -89,13 +101,13 @@ func (h *oneInchApiHandler) getWalletBalance(params []string) (interface{}, erro
 	chainId := params[0]
 	address := params[1]
 
-	err := h.validateRequest(chainId, address)
+	chainIdInt, err := h.validateRequest(chainId, address)
 	if err != nil {
 		h.logger.Error("failed validate request for GetWalletBalance")
 		return nil, err
 	}
 
-	client, err := h.getClientByChainId(chainId)
+	client, err := h.getClientByChainId(chainIdInt)
 
 	if err != nil {
 		return nil, err
@@ -117,14 +129,37 @@ func (h *oneInchApiHandler) getWalletBalance(params []string) (interface{}, erro
 	return resp, nil
 }
 
-func (h *oneInchApiHandler) validateRequest(chainId, address string) error {
+func (h *oneInchApiHandler) validateRequest(chainId, address string) (uint64, error) {
 	if address == "" {
-		return errEmptyAddress
+		return 0, errEmptyAddress
 	}
 
 	if chainId == "" {
-		return errEmptyChainId
+		return 0, errEmptyChainId
 	}
 
-	return nil
+	chainIdInt, err := strconv.ParseUint(chainId, 10, 64)
+	if err != nil {
+		h.logger.Error("Invalid chainId format", slog.Any("chainId", chainId))
+		return 0, errChainIdMustBeNumeric
+	}
+
+	if !h.isSupportedChainId(chainId) {
+		return 0, errChainIdNotSupported
+	}
+
+	return chainIdInt, nil
+}
+
+func (h *oneInchApiHandler) isSupportedChainId(chainId string) bool {
+	switch chainId {
+	case chainIdArbitrum, chainIdAvalance, chainIdAurora, chainIdBase, chainIdBinance,
+		chainIdEthereum, chainIdFantom, chainIdGnosis, chainIdKaia, chainIdLinea, chainIdPolygon,
+		chainIdZkSync, chainOptimism:
+		{
+			return true
+		}
+	default:
+		return false
+	}
 }

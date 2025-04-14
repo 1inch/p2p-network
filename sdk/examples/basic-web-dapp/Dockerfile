@@ -17,4 +17,4 @@ RUN npm install -g serve
 
 EXPOSE 9999
 
-CMD ["serve", "-s", "dist", "-l", "9999"] 
+CMD ["serve", "-s", "dist", "-l", "9999"]

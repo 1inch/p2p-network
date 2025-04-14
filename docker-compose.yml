@@ -25,6 +25,20 @@ services:
     networks:
       - fullstack
 
+  basic-web-dapp:
+    container_name: basic-web-dapp
+    build:
+      context: .
+      dockerfile: ./sdk/examples/basic-web-dapp/Dockerfile
+    ports:
+      - "9999:9999"
+    networks:
+      - fullstack
+    depends_on:
+      - blockchain
+      - relayer
+      - resolver
+
   relayer:
     container_name: relayer
     build:

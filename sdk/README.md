@@ -108,7 +108,7 @@ Executes an API request by performing these steps:
 3. **Protobuf Wrapping:**  
    Wraps the request in a Protobuf message and sends it over the WebRTC DataChannel.
 4. **Response Handling:**  
-   Waits for a response on the DataChannel’s `onmessage` event and conditionally decrypts it using the corresponding private key before resolving the Promise.
+   Waits for a response on the DataChannel's `onmessage` event and conditionally decrypts it using the corresponding private key before resolving the Promise.
 
 - **Parameters:**
   - `request` (JsonRequest): An object structured as follows:
@@ -240,6 +240,56 @@ make build_resolver_local
 bin/resolver run --api=1inch --1inch_key=put-key-here --privateKey=5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a  --grpc_endpoint=127.0.0.1:8001
 ```
 
+## Docker Compose Setup
+
+For a more streamlined setup, you can use Docker Compose to start all components of the system with a single command:
+
+```bash
+docker-compose up -d
+```
+
+This will start:
+- Anvil (local Ethereum node)
+- Registry contract deployment
+- Relayer node
+- Resolver node
+- Web dApp example (accessible at http://localhost:3000)
+
+### Configuration
+
+The Docker Compose setup uses predefined configuration files for each component. These configurations are included in the Docker images and don't require additional environment variables to be set.
+
+### Accessing Services
+
+After starting the services, you can access:
+- Anvil RPC: `http://localhost:8545`
+- Relayer: `http://localhost:8080`
+- Resolver gRPC: `localhost:8001`
+- Web dApp: `http://localhost:9999`
+
+### Web dApp Features
+
+The containerized web dApp includes all the features described in the Examples section:
+- Connection state indicator
+- Collapsible logs section
+- API methods (Get Balance, Send Funds)
+- Encryption toggle
+- Unified logging
+
+### Stopping Services
+
+To stop all services:
+
+```bash
+docker-compose down
+```
+
+To stop and remove all data (including the deployed contracts):
+
+```bash
+docker-compose down -v
+```
+
 ---
 
 ## Examples
@@ -286,3 +336,94 @@ The SDK includes a sample web dApp that demonstrates real-world usage of the Cli
    ```bash
    npm run preview
    ```
+
+## Request/Response Models
+
+### JsonRequest
+```typescript
+export type JsonRequest = {
+  Id: string;          // Unique request identifier
+  Method: string;      // API method to call
+  Params: string[];    // Method parameters as strings
+};
+```
+
+### JsonResponse
+```typescript
+export type JsonResponse = {
+  id: string;         // Matches the request ID
+  result: any;        // Response data
+};
+```
+
+## Error Handling
+
+The SDK implements comprehensive error handling through several layers:
+
+### 1. Resolver Errors
+```typescript
+enum ErrorCode {
+  ERR_INTERNAL_EXCEPTION = 0,             // gRPC execution failure
+  ERR_INVALID_MESSAGE_FORMAT = 1,         // Error in message format
+  ERR_RESPONSE_SERIALIZATION_FAILED = 2   // Failed to serialize the response
+}
+```
+
+### Error Structure
+```typescript
+interface Error {
+  code: ErrorCode;    // Error code from the enum
+  message: string;    // Error description
+}
+```
+
+### Error Handling Flow
+
+1. **Request Level**:
+   - Each request is assigned a unique ID
+   - The client maintains a map of pending requests with their resolvers
+   - Timeouts are handled automatically
+
+2. **Response Level**:
+   - Responses are matched to requests using the ID
+   - Error responses include both an error code and a descriptive message
+   - Failed requests are automatically rejected with appropriate error messages
+
+3. **Connection Level**:
+   - WebRTC connection failures are handled gracefully
+   - Automatic reconnection attempts are made when possible
+   - Connection state changes are logged for debugging
+
+### Example Error Handling
+
+```typescript
+try {
+  const response = await client.execute({
+    Id: "request-id",
+    Method: "GetWalletBalance",
+    Params: ["1", "0x4838B106FCe9647Bdf1E7877BF73cE8B0BAD5f97"]
+  });
+  // Handle successful response
+  console.log("Balance:", response.result);
+} catch (error) {
+  if (error instanceof Error) {
+    // Handle specific error types
+    switch (error.message) {
+      case "ERR_INVALID_MESSAGE_FORMAT":
+        // Error in message format
+        console.error("Invalid message format");
+        break;
+      case "ERR_INTERNAL_EXCEPTION":
+        // Internal server error
+        console.error("Internal server error");
+        break;
+      case "ERR_RESPONSE_SERIALIZATION_FAILED":
+        // Failed to serialize response
+        console.error("Response serialization failed");
+        break;
+    }
+  }
+  // Handle generic errors
+  console.error("Request failed:", error);
+}
+```

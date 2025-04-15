@@ -118,3 +118,92 @@ If some parameter doesn`t display on endpoint, you should make a request to reso
 - ***grpc_server_recv_bytes{service,method,frame}*** [histogram] Bytes received in gRPC server requests.
 - ***grpc_server_sent_bytes{service,method,frame}***
  [histogram] Bytes sent in gRPC server responses.
+
+## Error Handling
+
+The resolver implements a robust error handling system that covers various failure scenarios:
+
+### Error Types
+
+1. **Configuration Errors**
+   - Missing required parameters (e.g., `--config_file`)
+   - Invalid configuration values
+   - File system errors when loading configuration
+
+2. **gRPC Service Errors**
+   ```go
+   var (
+       errNoHandlerApiInConfig = errors.New("no handler api in config")
+       errEmptyRequest = errors.New("empty request")
+       errEmptyRequestId = errors.New("empty request id")
+       errEmptyPayload = errors.New("empty payload")
+       errEmptyPublicKey = errors.New("empty public key")
+   )
+   ```
+
+3. **Request Processing Errors**
+   - Invalid message format
+   - Failed response serialization
+   - Internal execution failures
+
+### Error Response Format
+
+```protobuf
+message Error {
+  ErrorCode code = 1;    // Error code
+  string message = 2;    // Error description
+}
+
+message ResolverResponse {
+  string id = 1;
+  bool encrypted = 2;
+  oneof result {
+    bytes payload = 3;  // Successful response
+    Error error = 4;    // Error response
+  }
+}
+```
+
+### Error Codes
+
+```go
+enum ErrorCode {
+  ERR_INVALID_MESSAGE_FORMAT = 0;        // Error in message format
+  ERR_GRPC_EXECUTION_FAILED = 1;         // gRPC execution failure
+  ERR_RESPONSE_SERIALIZATION_FAILED = 2; // Failed to serialize the response
+}
+```
+
+### Error Handling Flow
+
+1. **Request Validation**
+   - Validates incoming request format
+   - Checks for required fields
+   - Verifies message integrity
+
+2. **Processing**
+   - Handles gRPC execution errors
+   - Manages serialization failures
+   - Logs errors with appropriate context
+
+3. **Response**
+   - Returns structured error responses
+   - Includes error codes and messages
+   - Maintains request ID correlation
+
+### Example Error Response
+
+```json
+{
+  "error": {
+    "code": 0,
+    "message": "Invalid message format: empty request id"
+  }
+}
+```
+
+### Logging
+
+- Errors are logged with appropriate severity levels
+- Includes request context for debugging
+- Maintains audit trail for troubleshooting

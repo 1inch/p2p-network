@@ -81,10 +81,10 @@ testsum_local:
 	@echo "Start anvil in docker"
 	@docker run -p 8545:8545 -d --name anvil --platform linux/amd64 ghcr.io/foundry-rs/foundry:latest "anvil --host 0.0.0.0 --accounts 21"
 	@timeout 5 sh -c 'until nc -z localhost 8545; do sleep 1; done' || (echo "Anvil failed to start." && exit 1);
-	@make deploy_contract
-	@make register_nodes
-	@make testsum
-	@docker container rm -f $$(docker container ls --filter='name=anvil' -q)
+	@trap 'docker container rm -f $$(docker container ls --filter='name=anvil' -q)' EXIT; \
+	make deploy_contract \
+	 	 register_nodes \
+	 	 testsum
 
 .PHONY: deploy_contract
 deploy_contract:

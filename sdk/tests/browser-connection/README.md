@@ -39,7 +39,11 @@ npm install
 ```
 bun build src/call_client_script.ts --outdir ./build --sourcemap=external
 ```
-9. run tests
+9. run test server
+```
+make start_test_server
+```
+10. run tests
 ```
 npm test
 ```

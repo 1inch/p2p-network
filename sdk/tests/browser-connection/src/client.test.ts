@@ -109,6 +109,10 @@ describe("SDK integration tests",  ()=> {
   testCases.forEach((testCase) => {
     test(testCase.name, async ()=> {
       let page = await browser.newPage()
+
+      page.on('console', (message) => {
+        console.log(`[Page Log] [${message.type()}]: ${message.text()}`);
+      })
   
       await page.goto(webPageForTest);
       console.log("open page index.html")

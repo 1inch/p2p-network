@@ -122,7 +122,7 @@ function shouldEncryptRequest(): boolean {
 async function getBalance(client: Client): Promise<void> {
   const chainId = (document.getElementById("chainIdInput") as HTMLInputElement).value;
   const address = (document.getElementById("addressInput") as HTMLInputElement).value;
-  const balanceField = document.getElementById("balanceField") as HTMLInputElement;
+  const balanceField = document.getElementById("balanceList") as HTMLInputElement;
   const req: JsonRequest = {
     Id: "TestID-GetBalance",
     Method: "GetWalletBalance",
@@ -133,7 +133,7 @@ async function getBalance(client: Client): Promise<void> {
     const resp: JsonResponse = await client.execute(req, shouldEncryptRequest());
     mainLogger.info("GetBalance response received:", JSON.stringify(resp));
     if (resp && (resp as any).result) {
-      balanceField.value = JSON.stringify((resp as any).result);
+      renderBalances((resp as any).result);
     } else {
       balanceField.value = "No balance returned";
     }
@@ -164,10 +164,6 @@ async function sendFunds(client: Client): Promise<void> {
   }
 }
 
-function methodNotImplemented(methodName: string): void {
-  showError("Method '" + methodName + "' is not implemented.");
-}
-
 window.onload = async () => {
   let client: Client;
   try {
@@ -190,3 +186,53 @@ window.onload = async () => {
     };
   }
 };
+
+const COMMON_TOKENS: Record<string, string> = {
+  '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee': 'ETH or NATIVE',   // native coin
+  '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 'USDC',
+  '0xdac17f958d2ee523a2206206994597c13d831ec7': 'USDT',
+} as const;
+
+const toLower = (addr: string) => addr.toLowerCase();
+
+function renderBalances(balances: Record<string, string>): void {
+  let container = document.getElementById('balanceList') as HTMLDivElement | null;
+
+  if (!container) {
+    const fieldParent = document.getElementById('balanceField')!.parentElement!;
+    container = document.createElement('div');
+    container.id = 'balanceList';
+    container.className = 'accordion-body mt-2';
+    fieldParent.appendChild(container);
+  }
+  container.innerHTML = '';
+
+  const sorted = Object.entries(balances).sort(([aToken, aAmt], [bToken, bAmt]) => {
+    const aBalance = BigInt(aAmt);
+    const bBalance = BigInt(bAmt);
+    if (aBalance > bBalance) return -1;
+    if (aBalance < bBalance) return 1;
+    return 0;
+  });
+
+  sorted.forEach(([token, amount]) => {
+    const symbol = COMMON_TOKENS[toLower(token)] ?? '';
+    const row = document.createElement('div');
+    row.className =
+      'd-flex justify-content-between align-items-center border-bottom py-1 small';
+    if (symbol) {
+      row.innerHTML = `
+        <span class="border rounded px-2 me-2">${symbol}</span>
+        <span class="text-break flex-grow-1">${token}</span>
+        <span class="fw-semibold">${amount}</span>
+      `;
+    } else {
+      row.innerHTML = `
+        <span class="text-break flex-grow-1">${token}</span>
+        <span class="fw-semibold">${amount}</span>
+      `;
+    }
+
+    container!.appendChild(row);
+  });
+}

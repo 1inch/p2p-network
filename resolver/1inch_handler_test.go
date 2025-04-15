@@ -94,7 +94,16 @@ func TestNegativeCases(t *testing.T) {
 				Method: getWalletBalanceMethod,
 				Params: []string{"not-numeric", ethereumAddressFromMainnet},
 			},
-			expectedErr: "chainid must be numeric",
+			expectedErr: "chainId must be numeric",
+		},
+		{
+			name: "ChainId not supported",
+			request: &types.JsonRequest{
+				Id:     "chainId-not-supported",
+				Method: getWalletBalanceMethod,
+				Params: []string{"11155111", ethereumAddressFromMainnet},
+			},
+			expectedErr: "chainId not supported",
 		},
 		{
 			// in handler set incorrect token, so need just put valid request
@@ -126,5 +135,5 @@ func getOneInchPortalTokenFromEnv() string {
 		return token
 	}
 
-	panic("For 1inch tests need set devv portal token to environment, expected key: 'DEV_PORTAL_TOKEN'")
+	panic("For 1inch tests need set dev portal token to environment, expected key: 'DEV_PORTAL_TOKEN'")
 }

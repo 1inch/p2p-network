@@ -4,6 +4,7 @@ services:
   blockchain:
     container_name: blockchain
     image: ghcr.io/foundry-rs/foundry:v0.3.0
+    # platform: linux/amd64
     entrypoint: "anvil --host 0.0.0.0"
     ports:
       - "8545:8545"
@@ -41,6 +42,7 @@ services:
       - "15000-15500:15000-15500"
     networks:
       - fullstack
+      - test
 
   resolver:
     container_name: resolver
@@ -60,6 +62,51 @@ services:
     networks:
       - fullstack
 
+  basic-web-dapp:
+    container_name: basic-web-dapp
+    build:
+      context: .
+      dockerfile: ./sdk/examples/basic-web-dapp/Dockerfile
+    ports:
+      - "9999:9999"
+    networks:
+      - fullstack
+    depends_on:
+      - blockchain
+      - relayer
+      - resolver
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+    networks:
+      - fullstack
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./assets/provisioning:/etc/grafana/provisioning
+    environment:
+      # Default Grafana admin password; change as needed.
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - fullstack
+
 networks:
   fullstack:
     driver: bridge
+  test:
+    driver: ipvlan

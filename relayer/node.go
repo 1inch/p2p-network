@@ -10,14 +10,21 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/1inch/p2p-network/internal/registry"
 	"github.com/1inch/p2p-network/relayer/grpc"
 	"github.com/1inch/p2p-network/relayer/httpapi"
+	"github.com/1inch/p2p-network/relayer/metrics"
 	webrtcserver "github.com/1inch/p2p-network/relayer/webrtc"
 	"github.com/pion/webrtc/v4"
 	"golang.org/x/sync/errgroup"
 )
+
+type responseRecorder struct {
+	http.ResponseWriter
+	statusCode int
+}
 
 // Relayer represents the core relayer node with subsystems.
 type Relayer struct {
@@ -79,6 +86,7 @@ func New(cfg *Config, logger *slog.Logger) (*Relayer, error) {
 		mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 			logger.Debug("called /health endpoint")
 		})
+		mux.Handle("/metrics", metrics.Handler())
 
 		httpServer = httpapi.New(logger.WithGroup("httpapi"), httpListener, handlerWithLoggingAndCors(logger, mux))
 	}
@@ -213,7 +221,16 @@ func handlerWithLoggingAndCors(logger *slog.Logger, next http.Handler) http.Hand
 		corsMiddleware(w, r)
 		clonedReq := loggerMiddlewareBeforeServe(logger, r)
 
+		start := time.Now()
+		rr := &responseRecorder{ResponseWriter: w, statusCode: http.StatusOK}
+
 		next.ServeHTTP(w, clonedReq)
+
+		duration := time.Since(start).Seconds()
+		handlerLabel := clonedReq.URL.Path
+		metrics.HttpRequestDuration.WithLabelValues(handlerLabel, clonedReq.Method).Observe(duration)
+		metrics.HttpRequestsTotal.WithLabelValues(handlerLabel, clonedReq.Method, fmt.Sprintf("%d", rr.statusCode)).Inc()
+
 		loggerMiddlewareAfterServe(logger, clonedReq)
 	})
 }

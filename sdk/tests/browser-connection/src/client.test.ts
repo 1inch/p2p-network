@@ -117,6 +117,10 @@ describe("SDK integration tests",  ()=> {
       await page.goto(webPageForTest);
       console.log("open page index.html")
 
+      await createDatachannel(page);
+      await waitCreatingDatachannel(page);
+      await checkDatachannelIsOpened(page);
+
       await inputRequestOnPage(page, testCase.request)
 
       await clickTestExecutionButton(page)
@@ -159,7 +163,11 @@ async function inputValueInInputOnPage(page: Page,  inputId: string, newValue: s
 }
 
 async function getValueFromInputOnPage(page: Page, inputId: string): Promise<string> {
-  return await page.$eval(`#${inputId}`, element =>  (element as HTMLInputElement).value);
+  return await page.$eval(`#${inputId}`, element => (element as HTMLInputElement).value);
+}
+
+async function getTextFromLabelOnPage(page: Page, labelId: string): Promise<string | null> {
+  return await page.$eval(`#${labelId}`, element => (element as HTMLLabelElement).textContent);
 }
 
 function mapParamsForInput(params: string[]): string {
@@ -172,6 +180,26 @@ async function waitWhenRelayerGiveResponse(page: Page) {
   await page.waitForSelector(`#${inputIdForRequestIdResult}`)
   await page.waitForSelector(`#${inputIdForResult}`)
   console.log("response received")
+}
+
+async function createDatachannel(page: Page) {
+  console.log("click to button 'Test execute'")
+  await page.click("#button-init-datachannel");
+}
+
+async function waitCreatingDatachannel(page: Page) {
+  console.log("start waiting")
+  await page.waitForSelector("#label-status")
+}
+
+async function checkDatachannelIsOpened(page: Page) {
+  let state = await getTextFromLabelOnPage(page, "label-status");
+
+  if (state === 'true') {
+    console.log("data channel created successful")
+  } else {
+    throw new Error(`cant open datachannel`)
+  }
 }
 
 async function launchBrowser(): Promise<Browser>{

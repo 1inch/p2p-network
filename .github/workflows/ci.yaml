@@ -150,11 +150,11 @@ jobs:
 
       - name: Start relayer for SDK test
         run: |
-          make run_relayer_local &
+          make run_relayer_local
 
       - name: Start resolver for SDK test
         run: |
-          make run_resolver_local &
+          make run_resolver_local
 
       - name: Start test server
         run: |

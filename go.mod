@@ -6,7 +6,7 @@ require (
 	bursavich.dev/grpcprom v0.2.3
 	github.com/1inch/1inch-sdk-go v1.0.0-beta.3
 	github.com/ecies/go/v2 v2.0.10
-	github.com/ethereum/go-ethereum v1.14.12
+	github.com/ethereum/go-ethereum v1.14.13
 	github.com/pion/webrtc/v4 v4.0.6
 	github.com/prometheus/client_golang v1.21.1
 	github.com/stretchr/testify v1.10.0

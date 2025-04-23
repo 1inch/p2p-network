@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/1inch/p2p-network/internal/registry"
-	pb "github.com/1inch/p2p-network/proto"
+	pb "github.com/1inch/p2p-network/proto/resolver"
+	"github.com/1inch/p2p-network/relayer/metrics"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -113,18 +115,25 @@ func (c *Client) getConn(publicKey []byte) (*grpc.ClientConn, error) {
 }
 
 func loggingCallHandler(ctx context.Context, logger *slog.Logger, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	start := time.Now()
+
 	logger.Info("send request on grpc server", slog.Any("method", method))
 	logger.Debug("with request", slog.Any("req", protojson.Format(req.(proto.Message))))
 
 	err := invoker(ctx, method, req, reply, cc, opts...)
-
+	duration := time.Since(start).Seconds()
+	status := "success"
 	if err != nil {
+		status = "failed"
 		logger.Info("request failed process", slog.Any("method", method))
 		logger.Debug("with error", slog.Any("err", err.Error()))
 	} else {
 		logger.Info("receive response from grpc server", slog.Any("method", method))
 		logger.Debug("with response", slog.Any("resp", protojson.Format(reply.(proto.Message))))
 	}
+
+	metrics.GrpcRequestsTotal.WithLabelValues(method, status).Inc()
+	metrics.GrpcRequestDuration.WithLabelValues(method).Observe(duration)
 
 	return err
 }

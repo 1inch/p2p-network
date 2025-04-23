@@ -12,9 +12,10 @@ on:
       - 'dev'
 
 jobs:
-
   detect-changes:
     runs-on: ubuntu-latest
+    env:
+      DEV_PORTAL_TOKEN: ${{ secrets.DEV_PORTAL_TOKEN }}
     outputs:
       configs: ${{ steps.changes.outputs.configs }}
       node_registry: ${{ steps.changes.outputs.node-registry }}
@@ -31,6 +32,7 @@ jobs:
               - 'assets/**'
             node-registry:
               - 'contracts/NodeRegistry.sol'
+      
       - name: Set Outputs as JSON
         if: github.ref == 'refs/heads/dev'
         run: |
@@ -39,6 +41,7 @@ jobs:
             --arg node_registry "${{ steps.changes.outputs.node-registry }}" \
             '. + {configs: $configs, "node-registry": $node_registry}' \
             > outputs.json
+      
       - name: Upload Changes Artifact
         if: github.ref == 'refs/heads/dev'
         uses: actions/upload-artifact@v4
@@ -48,6 +51,8 @@ jobs:
 
   verify_build:
     runs-on: ubuntu-latest
+    env:
+      DEV_PORTAL_TOKEN: ${{ secrets.DEV_PORTAL_TOKEN }}
 
     steps:
       - name: Checkout code
@@ -65,14 +70,15 @@ jobs:
       - name: Lint code
         uses: golangci/golangci-lint-action@v6.1.1
         with:
-            version: latest
-            install-mode: binary
-            github-token: ${{ secrets.GITHUB_TOKEN }}
-            only-new-issues: false
-            skip-cache: false
-            skip-save-cache: false
-            problem-matchers: false
-            cache-invalidation-interval: 7
+          version: latest
+          install-mode: binary
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          only-new-issues: false
+          skip-cache: false
+          skip-save-cache: false
+          problem-matchers: false
+          cache-invalidation-interval: 7
+          args: --timeout=5m
   
       - name: Check compilation
         run: |
@@ -80,6 +86,8 @@ jobs:
   
   test:
     runs-on: ubuntu-latest
+    env:
+      DEV_PORTAL_TOKEN: ${{ secrets.DEV_PORTAL_TOKEN }}
 
     steps:
       - name: Checkout code

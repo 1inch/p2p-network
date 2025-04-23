@@ -133,7 +133,56 @@ Discovery service is a Ethereum smart contract that provides the following funct
 - getting relayer and resolver public keys (**getRelayer()**)
 - fetching resolver IPs by public key (**getResolver(pubKey)**)
 
+## End-to-End Encryption Scheme (ECIES)
 
+This section provides a concise overview of a ECIES (Elliptic Curve Integrated Encryption Scheme) request–response exchange between parties (dApp -> [Relayer (proxies)] -> Resolver), Alice (dApp) and Bob (Resolver). Each side uses elliptic-curve–based key agreement to derive symmetric keys for both encryption and authentication.
+
+### Overview
+
+1. **Alice → Bob (Request)**
+   - Alice creates an ephemeral key pair.
+   - She derives a shared secret with Bob’s public key, runs it through a KDF to get an encryption key and a MAC key.
+   - Alice encrypts her request and computes a MAC.
+   - She sends Bob:
+     1. Her ephemeral public key  
+     2. The encrypted request  
+     3. The MAC tag
+
+2. **Bob Receives & Processes**
+   - Bob uses his private key and Alice’s ephemeral public key to derive the same keys.
+   - He verifies the MAC and decrypts the request.
+   - Bob processes the request and prepares a response.
+
+3. **Bob → Alice (Response)**
+   - Bob generates a fresh ephemeral key pair.
+   - He derives a new shared secret with Alice’s corresponding public key.
+   - Bob encrypts his response and computes a MAC.
+   - He sends Alice:
+     1. His ephemeral public key  
+     2. The encrypted response  
+     3. The MAC tag
+
+4. **Alice Receives & Verifies**
+   - Alice recreates the shared secret with Bob’s ephemeral public key.
+   - She verifies the MAC and decrypts the response.
+
+### Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant Alice
+    participant Bob
+    
+    Note over Alice: Generate ephemeral key pair (EKA)
+    Alice->>Bob: [EKA.public, Encrypted Request, MAC]
+    Bob->>Bob: Derive keys using EKA.public + Bob's private key
+    Bob->>Bob: Verify MAC & Decrypt Request
+    Bob->>Bob: Generate ephemeral key pair (EKB) for response
+    Bob->>Bob: Derive keys using EKB.private + Alice's public key
+    Bob->>Alice: [EKB.public, Encrypted Response, MAC]
+    Alice->>Alice: Derive keys using EKB.public + EKA.private
+    Alice->>Alice: Verify MAC & Decrypt Response
+```
 
 ## Monitoring services
 

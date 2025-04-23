@@ -60,20 +60,24 @@
         <div id="collapseBalance" class="accordion-collapse collapse show" aria-labelledby="headingBalance" data-bs-parent="#methodsAccordion">
           <div class="accordion-body">
             <div class="mb-3">
+              <label for="chainIdInput" class="form-label">ChainId:</label>
+              <input type="text" class="form-control" id="chainIdInput" value="1" />
+            </div>
+            <div class="mb-3">
               <label for="addressInput" class="form-label">Address:</label>
               <input type="text" class="form-control" id="addressInput" value="0x1234567890abcdef1234567890abcdef12345678" />
             </div>
             <button id="getBalanceBtn" class="btn btn-primary mb-2">Get Balance</button>
             <div>
-              <label class="form-label">Result:</label>
-              <input type="text" class="form-control result-area" id="balanceField" readonly />
+              <label class="form-label">Balances:</label>
+              <div id="balanceList"></div>
             </div>
           </div>
         </div>
       </div>
       
       <!-- Send Funds -->
-      <div class="accordion-item">
+      <!-- <div class="accordion-item">
         <h2 class="accordion-header" id="headingSendFunds">
           <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseSendFunds" aria-expanded="false" aria-controls="collapseSendFunds">
             Send Funds
@@ -88,7 +92,7 @@
             </div>
           </div>
         </div>
-      </div>
+      </div> -->
     </div>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>

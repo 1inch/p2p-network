@@ -9,15 +9,14 @@ import (
 	"net"
 	"net/http"
 
-	pb "github.com/1inch/p2p-network/proto"
+	"bursavich.dev/grpcprom"
+	pb "github.com/1inch/p2p-network/proto/resolver"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.opentelemetry.io/otel/exporters/prometheus"
-	"go.opentelemetry.io/otel/sdk/metric"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	grpchealth "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
-	"google.golang.org/grpc/stats/opentelemetry"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -45,33 +44,36 @@ func New(cfg Config, logger *slog.Logger) (*Resolver, error) {
 		logger.Error("failed create server", slog.Any("err", err.Error()))
 	}
 
-	var serverOptions []grpc.ServerOption
+	loggingInterceptor := func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
+		return loggingRequestHandler(ctx, logger, req, info, handler)
+	}
+	var serverOpts []grpc.ServerOption
 	// if metric enabled setup http server for metrics
+	registry := prometheus.NewRegistry()
+	serverMetrics := grpcprom.NewServerMetrics()
+
 	if cfg.Metric.Enabled {
-		exporter, err := prometheus.New()
+		serverMetrics := grpcprom.NewServerMetrics()
+		registry.MustRegister(serverMetrics)
+
 		if err != nil {
 			logger.Error("failed to start prometheus exporter", slog.Any("err", err.Error()))
 			return nil, err
 		}
 
-		meterProvider := metric.NewMeterProvider(metric.WithReader(exporter))
-		meterServerOption := opentelemetry.ServerOption(opentelemetry.Options{
-			MetricsOptions: opentelemetry.MetricsOptions{
-				MeterProvider: meterProvider,
-			},
-		})
-		serverOptions = append(serverOptions, meterServerOption)
-		metricServer := newMetricServer(&cfg)
+		serverOpts = append(serverOpts,
+			grpc.ChainUnaryInterceptor(loggingInterceptor, serverMetrics.UnaryInterceptor()),
+			grpc.StatsHandler(serverMetrics.StatsHandler()),
+		)
 
+		metricServer := newMetricServer(&cfg, registry)
 		resolver.httpMetricServer = metricServer
+	} else {
+		serverOpts = append(serverOpts, grpc.UnaryInterceptor(loggingInterceptor))
 	}
 
-	serverOptions = append(serverOptions, grpc.UnaryInterceptor(
-		func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
-			return loggingRequestHandler(ctx, logger, req, info, handler)
-		}))
-
-	resolver.grpcServer = newGrpcServer(logger, server, serverOptions...)
+	resolver.grpcServer = newGrpcServer(logger, server, serverOpts...)
+	serverMetrics.Init(resolver.grpcServer)
 
 	// Create TCP listener
 	listener, err := net.Listen("tcp", cfg.GrpcEndpoint)
@@ -102,9 +104,9 @@ func newGrpcServer(logger *slog.Logger, server *Server, opts ...grpc.ServerOptio
 	return grpcServer
 }
 
-func newMetricServer(cfg *Config) *http.Server {
+func newMetricServer(cfg *Config, registry prometheus.Gatherer) *http.Server {
 	mux := http.NewServeMux()
-	mux.Handle("GET /metrics", promhttp.Handler())
+	mux.Handle("GET /metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 
 	metricServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Metric.Port),
@@ -128,8 +130,11 @@ func (r *Resolver) Run() error {
 		go func() {
 			r.logger.Info("listening metric server", slog.Any("port", r.cfg.Metric.Port))
 			if err := r.httpMetricServer.ListenAndServe(); err != nil {
-				r.logger.Error("failed to start http server", slog.Any("err", err.Error()))
-				return
+				if errors.Is(err, http.ErrServerClosed) {
+					r.logger.Info("metric server closed")
+				} else {
+					r.logger.Error("failed to start http server", slog.Any("err", err.Error()))
+				}
 			}
 		}()
 	}
@@ -149,6 +154,8 @@ func (r *Resolver) Stop() error {
 			return err
 		}
 	}
+
+	r.logger.Info("grpc server stopped")
 	return nil
 }
 

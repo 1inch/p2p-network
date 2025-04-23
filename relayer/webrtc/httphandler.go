@@ -4,13 +4,17 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"time"
 
+	"github.com/1inch/p2p-network/relayer/metrics"
 	"github.com/pion/webrtc/v4"
 )
 
 // SDPHandler handles SDP request.
 func SDPHandler(logger *slog.Logger, sdpRequests chan SDPRequest) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
 		origin := r.Header.Get("Origin")
 		if origin == "" {
 			scheme := "http"
@@ -44,6 +48,10 @@ func SDPHandler(logger *slog.Logger, sdpRequests chan SDPRequest) http.HandlerFu
 			http.Error(w, "failed to process sdp offer", http.StatusInternalServerError)
 			return
 		}
+
+		latency := time.Since(start).Seconds()
+		metrics.EndToEndWorkflowLatency.Observe(latency)
+		metrics.EndToEndWorkflowCompleted.Inc()
 
 		resp := struct {
 			Answer webrtc.SessionDescription `json:"answer"`

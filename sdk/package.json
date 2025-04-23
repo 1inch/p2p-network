@@ -12,13 +12,13 @@
     "@bufbuild/protoc-gen-es": "^2.2.3",
     "@types/express": "^5.0.1",
     "ts-node": "^10.9.2",
-    "tsx": "^4.19.2",
+    "tsx": "^4.19.3",
     "typescript": "^5.7.2"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.2.3",
     "@roamhq/wrtc": "^0.8.0",
-    "axios": "^1.7.9",
+    "axios": "^1.8.2",
     "buffer": "^6.0.3",
     "eciesjs": "^0.4.13",
     "express": "^4.21.2",

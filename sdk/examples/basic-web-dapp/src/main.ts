@@ -2,7 +2,7 @@ import { JsonRequest, JsonResponse } from '../../../types';
 import { Client } from '../../../client';
 
 // Provide node endpoint and discovery contract address
-const providerUrl = "http://0.0.0.0:8545";
+const providerUrl = "http://blockchain:8545";
 const contractAddr = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 
 function appendLog(level: string, message: string): void {

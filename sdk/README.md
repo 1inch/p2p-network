@@ -266,6 +266,11 @@ After starting the services, you can access:
 - Relayer: `http://localhost:8080`
 - Resolver gRPC: `localhost:8001`
 - Web dApp: `http://localhost:9999`
+- Browser: `http://localhost:7900` (pass: secret)
+
+In order to have the system up and running correctly, you need access the example dApp via dockerized browser,
+so they share the same network. Access it opening Chrome in dockerized browser and using `http://basic-web-dapp:9999` address.
+Grafana can be opened using address `http://grafana:3000` (admin:admin).
 
 ### Web dApp Features
 

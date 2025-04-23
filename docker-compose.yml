@@ -105,6 +105,16 @@ services:
     networks:
       - fullstack
 
+  browser:
+    image: selenium/standalone-chrome:latest
+    container_name: browser
+    shm_size: 2gb
+    ports:
+      - "4444:4444"
+      - "7900:7900"
+    networks:
+      - fullstack
+
 networks:
   fullstack:
     driver: bridge

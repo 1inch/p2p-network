@@ -130,8 +130,11 @@ func (r *Resolver) Run() error {
 		go func() {
 			r.logger.Info("listening metric server", slog.Any("port", r.cfg.Metric.Port))
 			if err := r.httpMetricServer.ListenAndServe(); err != nil {
-				r.logger.Error("failed to start http server", slog.Any("err", err.Error()))
-				return
+				if errors.Is(err, http.ErrServerClosed) {
+					r.logger.Info("metric server closed")
+				} else {
+					r.logger.Error("failed to start http server", slog.Any("err", err.Error()))
+				}
 			}
 		}()
 	}
@@ -151,6 +154,8 @@ func (r *Resolver) Stop() error {
 			return err
 		}
 	}
+
+	r.logger.Info("grpc server stopped")
 	return nil
 }
 

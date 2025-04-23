@@ -1,0 +1,21 @@
+log_level: DEBUG
+http_endpoint: 127.0.0.1:8080
+private_key: 59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
+discovery:
+  rpc_url: http://127.0.0.1:8545
+  with_node_registry: false
+  contract_address: 0x5fbdb2315678afecb367f032d93f642f64180aa3
+webrtc:
+  use_trickle_ice: false
+  ice_servers:
+    - url: stun:stun1.l.google.com:19302
+    - url: turn:global.relay.metered.ca:80
+      username: 07627794187c15e0a64bccdb
+      password: UfypRsp+us/bRnp+      
+    - url: turn:global.relay.metered.ca:443
+      username: 07627794187c15e0a64bccdb
+      password: UfypRsp+us/bRnp+     
+  retry:
+    enabled: false
+    count: 5
+    interval: 1s

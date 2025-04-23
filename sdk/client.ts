@@ -14,7 +14,7 @@ export class Client {
   makingOffer: boolean = false;
   networkParams: NetworkParams | null;
   connectionOpened: any;
-  connectionClosed: any;
+  dataChannelSetupError: any;
   pendingRequests: Map<string, PendingRequest>;
   logger: Logger;
 
@@ -69,7 +69,7 @@ export class Client {
 
     return new Promise<boolean>((res, rej) => {
       this.connectionOpened = res;
-      this.connectionClosed = rej;
+      this.dataChannelSetupError = rej;
     });
   }
 
@@ -80,7 +80,7 @@ export class Client {
 
   onclose() {
     this.logger.info("channel closed")
-    this.connectionClosed(true);
+    this.connectionOpened(false);
   }
 
 
@@ -91,7 +91,11 @@ export class Client {
         candidate: parsePionCandidate(candidate.candidate),
       };
       this.logger.debug(`Candidate processed: ${JSON.stringify(sessionAndCandidate)}`);
-      this.send("/candidate", sessionAndCandidate);
+      this.send("/candidate", sessionAndCandidate)
+      .catch((error)=> {
+        this.logger.error("Failed when send candidate to relayer: ", error.message)
+        this.dataChannelSetupError(error)
+      })
     }
   }
 
@@ -197,7 +201,7 @@ export class Client {
       return;
     }
 
-    this.logger.debug("Response without error");
+    this.logger.debug("OutgoingMessage without error");
     if (!protoResp.value || typeof protoResp.value !== "object" || !("id" in protoResp.value)) {
       this.logger.warn("Invalid response: missing id", protoResp.value);
       return;
@@ -216,7 +220,7 @@ export class Client {
       const error = successResp.result.value as ResolverError
 
       this.logger.error(`Received a response with an error on the 'Resolver', error message: ${error.message}, error code: ${error.code}`)
-      pendingReq.reject(new Error(`Received a response with an error on the 'Resolver': ${error.message}`))
+      pendingReq.reject(new Error(`Resolver return error: ${error.message}`))
       this.pendingRequests.delete(successResp.id)
       return
     }

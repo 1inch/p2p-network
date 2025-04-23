@@ -89,10 +89,12 @@ testsum_local:
 .PHONY: deploy_contract
 deploy_contract:
 	@echo "Deploying contract..."
+	@go clean -testcache
 	@go test -count=1 -v -tags=deploy ./contracts -run ^TestDeployContract$
 
 .PHONY: register_nodes
 register_nodes:
+	@go clean -testcache
 	@go test -count=1 -v -tags=deploy ./contracts -run ^TestRegisterNodes$
 
 .PHONY: test_quick
@@ -130,6 +132,14 @@ stop-anvil:
 	else \
 		echo "No Anvil processes found."; \
 	fi
+
+run_relayer_local: build_relayer_local
+	bin/relayer run --config relayer/relayer.config.example.yaml &
+	timeout 10 sh -c 'until nc -z localhost 8080; do sleep 1; done' || (echo "Relayer failed to start." && exit 1);
+
+run_resolver_local: build_resolver_local
+	bin/resolver run --api=infura --infura_key=a8401733346d412389d762b5a63b0bcf --privateKey=5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a  --grpc_endpoint=127.0.0.1:8001 &
+	timeout 10 sh -c 'until nc -z localhost 8001; do sleep 1; done' || (echo "Resolver failed to start." && exit 1);
 
 test-integration:
 	go test -v github.com/1inch/p2p-network/test 

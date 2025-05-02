@@ -114,7 +114,7 @@ func TestNegativeCases(t *testing.T) {
 				Params: []string{ethereumChainId, ethereumAddressFromMainnet},
 			},
 			// TODO change this message after receive token
-			expectedErr: "processing response failed: failed to unmarshal error response body: unexpected end of JSON input",
+			expectedErr: "processing response failed: failed to unmarshal error response body: invalid character 'I' looking for beginning of value",
 		},
 	}
 

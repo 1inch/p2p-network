@@ -70,7 +70,8 @@ test:
 
 .PHONY: testsum
 testsum:
-	@gotestsum --format testname -- -race -count=1 ./...
+	@gotestsum --format testname -- -race -count=1 `go list ./... | grep -v sdk`
+	@make test-integration
 
 .PHONY: testsum_local
 testsum_local:
@@ -142,4 +143,4 @@ run_resolver_local: build_resolver_local
 	timeout 10 sh -c 'until nc -z localhost 8001; do sleep 1; done' || (echo "Resolver failed to start." && exit 1);
 
 test-integration:
-	go test -v github.com/1inch/p2p-network/test 
+	go test -v github.com/1inch/p2p-network/sdk/examples/qa/

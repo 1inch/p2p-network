@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"math/big"
 	"math/rand"
+	"net"
 	"net/http"
 	"os"
 	"testing"
@@ -31,14 +32,15 @@ import (
 )
 
 const (
-	httpEndpointToRelayer  = "127.0.0.1:8080"
-	grpcEndpointToResolver = "127.0.0.1:8001"
-	dialURL                = "127.0.0.1:8545"
-	privateKey             = "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
-	resolverPrivateKey     = "5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
-	contractAddress        = "0x5fbdb2315678afecb367f032d93f642f64180aa3"
+	httpEndpointToRelayer = "127.0.0.1:8080"
+	//grpcEndpointToResolver = "127.0.0.1:8001"
+	dialURL            = "127.0.0.1:8545"
+	privateKey         = "59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
+	resolverPrivateKey = "5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
+	contractAddress    = "0x5fbdb2315678afecb367f032d93f642f64180aa3"
 )
 
+var grpcEndpointToResolver string
 var iceServers = []webrtc.ICEServer{{URLs: []string{"stun:stun.l.google.com:19302"}}}
 
 type positiveTestCase struct {
@@ -47,6 +49,10 @@ type positiveTestCase struct {
 	JsonRequest                       *types.JsonRequest
 	FuncCheckActualJsonResponseResult func(result interface{})
 	ConfigForResolver                 *resolver.Config
+}
+
+func init() {
+	grpcEndpointToResolver = fmt.Sprintf("127.0.0.1:%d", getRandomAvailablePort())
 }
 
 func TestPositiveCases(t *testing.T) {
@@ -730,4 +736,22 @@ func generateSessionID() string {
 
 func generateRequestID() string {
 	return generateUniqueID("req")
+}
+
+func getRandomAvailablePort() int {
+	for attempts := 0; attempts < 50; attempts++ {
+		port := 8001 + rand.Intn(8079-8001+1) // 8001 to 8079 inclusive
+		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+		if err == nil {
+			listener.Close()
+			return port
+		}
+	}
+
+	listener, err := net.Listen("tcp", ":0")
+	if err != nil {
+		panic(err)
+	}
+	defer listener.Close()
+	return listener.Addr().(*net.TCPAddr).Port
 }
